@@ -1,12 +1,12 @@
-/**
- * Structured console logger shared by apps/api and apps/agent.
- *
- * This is the primary "watch the call happen" surface (per the demo
- * requirement) — every orchestration step prints a single, greppable,
- * timestamped line: `HH:mm:ss.SSS [scope] eventType  key=value key=value`.
- * It is intentionally plain (no external logging lib) so it reads well in a
- * raw terminal during a live demo.
- */
+
+
+
+
+
+
+
+
+
 
 const COLORS = {
   reset: "\x1b[0m",
@@ -40,7 +40,7 @@ function timestamp(): string {
   return `${hh}:${mm}:${ss}.${ms}`;
 }
 
-/** Redacts likely-sensitive keys before printing (CLAUDE.md §26 — never log secrets). */
+
 const SENSITIVE_KEYS = /key|secret|token|password|authorization/i;
 
 function formatFields(fields?: Record<string, unknown>): string {
@@ -86,7 +86,7 @@ export class Logger {
     this.write("error", message, fields);
   }
 
-  /** One line per CallEvent — the live "what is happening" feed. */
+
   event(eventType: string, fields?: Record<string, unknown>) {
     this.write("event", `${COLORS.bold}${eventType}${COLORS.reset}`, fields);
   }

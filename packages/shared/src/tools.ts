@@ -1,12 +1,12 @@
 import { z } from "zod";
 import { intakeFieldsSchema } from "./intake.js";
 
-/**
- * Typed input/output contracts for every tool (CLAUDE.md §9). ToolRegistry
- * validates against these before touching the database, and the same
- * schemas are used to generate the JSON-schema the LLM sees — one
- * definition, no drift between "what the model is told" and "what we accept".
- */
+
+
+
+
+
+
 
 export const getCallerInputSchema = z.object({
   phone: z.string().describe("Phone number in any format; will be normalized"),
@@ -16,7 +16,7 @@ export const getCallerOutputSchema = z.object({
   callerId: z.string().nullable(),
   name: z.string().nullable(),
   email: z.string().nullable(),
-  /** Most recent still-open matter, so a returning caller resumes it instead of opening a duplicate. */
+
   existingMatter: z
     .object({ matterId: z.string(), incidentType: z.string().nullable(), status: z.string() })
     .nullable(),

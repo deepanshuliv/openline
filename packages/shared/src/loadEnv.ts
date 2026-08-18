@@ -1,11 +1,11 @@
 import type { z } from "zod";
 
-/**
- * Validates process.env against a zod schema and fails fast with a readable
- * error instead of letting `undefined` secrets silently propagate into
- * LiveKit/OpenRouter/Deepgram clients. Each app defines its own schema
- * (they need different variables) and calls this once at startup.
- */
+
+
+
+
+
+
 export function loadEnv<T extends z.ZodTypeAny>(schema: T, source: NodeJS.ProcessEnv = process.env): z.infer<T> {
   const result = schema.safeParse(source);
   if (!result.success) {

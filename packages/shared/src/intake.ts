@@ -1,12 +1,12 @@
 import { z } from "zod";
 
-/**
- * Structured intake fields (CLAUDE.md §10 Matter, §15 structured extraction).
- * The LLM only ever produces data shaped like this via a JSON-schema
- * constrained response; nothing free-form ever reaches Postgres.
- * All fields are optional/nullable because intake is collected incrementally
- * across many turns — a partial update should never fail validation.
- */
+
+
+
+
+
+
+
 export const incidentTypeEnum = z.enum([
   "motor_vehicle_accident",
   "slip_and_fall",
@@ -62,7 +62,7 @@ export const callerContactSchema = z.object({
 });
 export type CallerContact = z.infer<typeof callerContactSchema>;
 
-/** Deterministic qualification rules (CLAUDE.md §7 QualificationAgent, §34). */
+
 export const QualificationStatus = {
   PENDING: "PENDING",
   QUALIFIED: "QUALIFIED",
@@ -83,11 +83,11 @@ export interface QualificationResult {
   reasons: string[];
 }
 
-/**
- * Pure, deterministic function — no LLM involved. Called by
- * QualificationAgent after IntakeAgent has extracted facts. Kept here so
- * both the agent runtime and unit tests import the exact same logic.
- */
+
+
+
+
+
 export function evaluateQualification(input: QualificationInput): QualificationResult {
   const reasons: string[] = [];
 

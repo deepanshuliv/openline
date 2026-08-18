@@ -1,11 +1,11 @@
 import { z } from "zod";
 
-/**
- * CallEvent type taxonomy (CLAUDE.md §10). This is the single vocabulary
- * every layer (agent orchestration, EventService, API, frontend timeline)
- * agrees on, so a raw event on the Redis stream and a persisted CallEvent
- * row always mean the same thing.
- */
+
+
+
+
+
+
 export const CallEventType = {
   CALL_STARTED: "call.started",
   AGENT_ENTERED: "agent.entered",
@@ -34,17 +34,17 @@ export const CallEventType = {
 
 export type CallEventType = (typeof CallEventType)[keyof typeof CallEventType];
 
-/**
- * Redis stream/pub-sub payload shape (CLAUDE.md §12) — deliberately mirrors the
- * Postgres CallEvent row field-for-field (id/callId/type/agent/phase/metadata/
- * timestamp/durationMs) so the frontend timeline can render a persisted
- * backlog row and a live pub/sub message with the same code path.
- */
+
+
+
+
+
+
 export const callEventPayloadSchema = z.object({
   id: z.string().optional(),
   callId: z.string(),
   type: z.enum(Object.values(CallEventType) as [string, ...string[]]),
-  timestamp: z.string(), // ISO string on the wire
+  timestamp: z.string(),
   phase: z.string().nullable().optional(),
   agent: z.string().nullable().optional(),
   durationMs: z.number().int().nonnegative().nullable().optional(),
@@ -54,5 +54,5 @@ export const callEventPayloadSchema = z.object({
 export type CallEventPayload = z.infer<typeof callEventPayloadSchema>;
 
 export const REDIS_CALL_EVENTS_STREAM = "call-events";
-/** pub/sub channel prefix used for the SSE fan-out (per-call channel = CALL_EVENTS_CHANNEL_PREFIX + callId) */
+
 export const CALL_EVENTS_CHANNEL_PREFIX = "call-events:";

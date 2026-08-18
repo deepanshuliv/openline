@@ -1,11 +1,11 @@
-/**
- * Explicit call state machine (CLAUDE.md §28).
- *
- * The LLM may *propose* a phase change (e.g. "I have enough info to qualify
- * this caller"), but only CallOrchestrator may actually apply one, and only
- * along an edge listed in PHASE_TRANSITIONS. This keeps the phase machine
- * deterministic even though the reasoning that suggests transitions is not.
- */
+
+
+
+
+
+
+
+
 export const CallPhase = {
   GREETING: "GREETING",
   TRIAGE: "TRIAGE",
@@ -20,7 +20,7 @@ export const CallPhase = {
 
 export type CallPhase = (typeof CallPhase)[keyof typeof CallPhase];
 
-/** Allowed phase -> phase edges. Anything not listed here is rejected. */
+
 export const PHASE_TRANSITIONS: Record<CallPhase, CallPhase[]> = {
   GREETING: [CallPhase.TRIAGE, CallPhase.ERROR_RECOVERY],
   TRIAGE: [CallPhase.INTAKE, CallPhase.HANDOFF_HUMAN, CallPhase.COMPLETED, CallPhase.ERROR_RECOVERY],
@@ -47,7 +47,7 @@ export const AgentName = {
 
 export type AgentName = (typeof AgentName)[keyof typeof AgentName];
 
-/** Voice-turn state (CLAUDE.md §17) — kept separate from the business CallPhase. */
+
 export const TurnState = {
   LISTENING: "LISTENING",
   THINKING: "THINKING",
