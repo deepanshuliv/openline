@@ -1,0 +1,147 @@
+
+
+
+
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum MatterStatus {
+  INTAKE
+  QUALIFIED
+  DISQUALIFIED
+  SCHEDULED
+  CLOSED
+}
+
+enum QualificationStatus {
+  PENDING
+  QUALIFIED
+  INSUFFICIENT
+  DISQUALIFIED
+}
+
+enum AppointmentStatus {
+  SCHEDULED
+  CONFIRMED
+  CANCELLED
+}
+
+enum CallStatus {
+  ACTIVE
+  COMPLETED
+  HANDOFF_HUMAN
+  ERROR
+}
+
+enum Speaker {
+  CALLER
+  AGENT
+  SYSTEM
+}
+
+model Caller {
+  id                String   @id @default(cuid())
+  name              String?
+  phone             String?  @unique
+  email             String?
+  preferredLanguage String?  @default("en")
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  matters Matter[]
+  calls   Call[]
+}
+
+model Matter {
+  id       String @id @default(cuid())
+  callerId String
+  caller   Caller @relation(fields: [callerId], references: [id])
+
+  status                    MatterStatus @default(INTAKE)
+  incidentType              String?
+  incidentDate              DateTime?
+  incidentLocation          String?
+  incidentDescription       String?
+  injuries                  String[]    @default([])
+  treatmentReceived         String?
+  emergencyServicesInvolved Boolean?
+  policeReport              Boolean?
+  insuranceInformation      String?
+  otherPartyInformation     String?
+  witnesses                 String?
+  lostWages                 Boolean?
+  representedByAttorney     Boolean?
+  notes                     String?
+  qualificationStatus       QualificationStatus @default(PENDING)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  calls        Call[]
+  appointments Appointment[]
+}
+
+model Appointment {
+  id             String            @id @default(cuid())
+  matterId       String
+  matter         Matter            @relation(fields: [matterId], references: [id])
+  scheduledAt    DateTime
+  type           String
+  status         AppointmentStatus @default(SCHEDULED)
+
+  idempotencyKey String            @unique
+  createdAt      DateTime          @default(now())
+}
+
+model Call {
+  id       String  @id @default(cuid())
+  callerId String?
+  caller   Caller? @relation(fields: [callerId], references: [id])
+  matterId String?
+  matter   Matter? @relation(fields: [matterId], references: [id])
+
+  roomName     String     @unique
+  startedAt    DateTime   @default(now())
+  endedAt      DateTime?
+  status       CallStatus @default(ACTIVE)
+  finalSummary String?
+
+  transcriptTurns TranscriptTurn[]
+  events          CallEvent[]
+
+  @@index([callerId])
+  @@index([matterId])
+}
+
+model TranscriptTurn {
+  id        String   @id @default(cuid())
+  callId    String
+  call      Call     @relation(fields: [callId], references: [id])
+  speaker   Speaker
+  text      String
+  timestamp DateTime @default(now())
+
+  @@index([callId])
+}
+
+model CallEvent {
+  id         String   @id @default(cuid())
+  callId     String
+  call       Call     @relation(fields: [callId], references: [id])
+  type       String
+  agent      String?
+  phase      String?
+  metadata   Json?
+  timestamp  DateTime @default(now())
+  durationMs Int?
+
+  @@index([callId])
+  @@index([type])
+}
