@@ -1,209 +1,217 @@
-# Gideon-style Voice Intake Orchestrator
+# Openline
 
-A browser-based voice intake prototype that connects a caller to a LiveKit voice agent, collects structured personal-injury intake fields, applies a small deterministic qualification rule set, and exposes live call events and persisted call history.
+*The clinic line that's always open.*
 
-> Portfolio / experimental project. The seed data is synthetic. Do not enter real caller or legal information: transcripts and intake fields are persisted, and configured voice and model providers receive call data. This is not legal advice and its qualification rules are not legal criteria.
+**Openline** is a browser-based voice AI receptionist platform. Its receptionist, **Suzi**, answers for a (fictional) family clinic, **Maple Grove Family Clinic**. One agent handles four kinds of calls: booking, rescheduling or cancelling appointments, insurance and eligibility questions, and prescription refills. When a refill needs a clinician, the agent does a **live warm transfer** to a human on the staff console.
 
-## Status
+The agent is built as a **vertical-agnostic core** plus a **clinic vertical**. The core owns the voice pipeline, call lifecycle, telemetry, latency tracking and warm transfer. The vertical supplies the persona, tools and business rules.
 
-The repository contains a Bun/Turborepo monorepo with a Next.js web console, an Express API, a LiveKit Agents worker, and Prisma-backed persistence. It has no hosted deployment target, CI workflow, automated tests, or test script.
+> Portfolio / experimental project. All patient data is synthetic. Do not enter real health information: transcripts are persisted and voice/model providers receive call audio and text. Nothing here is medical advice, and the insurance and refill rules are illustrative.
 
-The current checkout has a runtime gap: [`PolicyService`](apps/agent/src/services/PolicyService.ts) tries to load `intake-policy.md`, `escalation-rules.md`, `appointment-rules.md`, and `communication-policy.md`, but those files are not present in `apps/agent/src/policy/`. Add the files or change the loader before expecting the worker to handle a live call.
+## Using the app
 
-## What is implemented
+Everything a caller needs is on one route, `/`:
 
-- A live call console at `/` with microphone access through LiveKit.
-- Call history at `/calls` and persisted call detail pages at `/calls/:id`.
-- Four agent roles: triage, intake, qualification, and scheduling.
-- Structured intake extraction through OpenRouter, validated with the shared Zod schema and written incrementally to a matter.
-- Deterministic qualification based on reported injury, incident type, incident date, and whether the caller already has an attorney.
-- Deterministically generated follow-up slots and idempotent appointment creation. There is no calendar provider integration.
-- A live transcript, intake panel, and event timeline. The browser receives the timeline through Server-Sent Events (SSE), backed by Redis pub/sub.
-- Call, transcript, event, caller, matter, and appointment persistence in Postgres through Prisma.
+1. **Home.** The first screen is just the pitch, a **Call Suzi** button and three steps (press Call Suzi, allow your microphone, press OK when Suzi is ready). Scrolling down shows everything Suzi can do, the care team she books with (read live from the database via `GET /api/providers`), and the demo patients.
+2. **Connecting to Suzi.** A popup walks through three steps: Microphone → Connect → Talk.
+   - **Microphone first.** The browser asks for the microphone right away. Nothing else happens until the caller allows it: no call is created and Suzi can't join or speak. If it's blocked, missing or in use, the popup says how to fix it and offers **Try again**. If the caller unblocks it in browser settings, the popup carries on by itself where the browser supports that.
+   - **Connect.** Only after the microphone is allowed does the app create the call and join it, with the microphone still off. Suzi joins too, starts her voice session, and then sets the `agent.ready` attribute. Until then the popup says *Connecting to Suzi*. If she isn't ready within 30 seconds, it says so and offers **Try again**.
+   - **Talk.** Only then does it say *Suzi is ready*. Pressing **OK** turns the microphone on, sets the caller's `caller.ready` attribute and opens the call screen. Suzi says nothing and hears nothing until `caller.ready` arrives; then she greets. If the caller never presses OK, or leaves, she ends the call after 3 minutes without having said a word.
+   - **Cancel** (or Esc) goes back home at any step. If the clinic can't be reached, the popup says so and offers **Try again**.
+3. **On the call.** The conversation fills the screen, like a chat; until you speak it lists the demo patients you can call as. At the bottom sit Suzi's orb (listening, thinking or speaking) and the call bar: status, timer, **Full screen**, **Mute** and **End call**. There's no text box: this is a voice call. **Full screen** (or tapping the orb) shows only the large orb and the call buttons; **Show chat** (or tapping the orb again) brings the conversation back. **End call and go home** in the corner leaves in one click.
+4. **After the call.** A short summary, **Call Suzi again** or **Back home**.
 
-Human escalation is only represented by the `request_human_handoff` path and a call-ending reason. No human queue, notification, or transfer service is wired into the repository.
+The call screen also handles the usual problems itself. If microphone access is lost during the call (permission revoked, or the microphone fails to start), the call ends with a *Microphone needed* screen and **Try again**, so Suzi never keeps talking to someone she can't hear. If Suzi hasn't joined after 15 seconds, the screen says so. A dropped connection shows *The call dropped* with the same two buttons. Browsers that block sound get an **Enable sound** button.
+
+Staff use `/staff` to take warm transfers, and `/calls` lists past calls with their transcripts and latency.
+
+## Look and feel
+
+The web app is light, with an editorial serif for headlines and one brand palette that colours the hero ribbon and Suzi's orb. The ribbon (`components/Ribbon.tsx`, a WebGL shader) is a twisting band that breathes like a voice, with a satin groove texture, a pearlescent sheen and a soft shadow. Two palettes ship:
+
+- **Lagoon** (default): deep teal, aqua and periwinkle on a cool mist. Calm and clinical without feeling cold.
+- **Dusk**: plum, lilac and blush. Warmer and softer.
+
+Preview with `?palette=dusk` or `?palette=lagoon` (the choice is remembered in the browser). The tokens are `--ribbon-*` and `--sky-*` at the top of `apps/web/app/globals.css`.
+
+## Demo scenarios
+
+Seeded by `bun run db:seed`. Each scenario has a demo patient; the call screen lists them until the caller first speaks.
+
+| Scenario                               | Demo patient                       | What happens                                                                                                                                           |
+| -------------------------------------- | ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Book an appointment                    | Maria Gonzalez, DOB March 14, 1985 | Verifies identity, offers open slots, books one.                                                                                                       |
+| Reschedule / cancel                    | James Carter, DOB Nov 2, 1972      | Moves a follow-up with Dr. Lee and cancels an annual physical.                                                                                         |
+| Check insurance / eligibility          | Priya Shah, DOB July 21, 1990      | Finds the active BCBS plan (the old Cigna plan is inactive); quotes copay, deductible and coverage.                                                    |
+| Prescription refill + human escalation | Robert Chen, DOB May 9, 1958       | Lisinopril goes to the pharmacy; lorazepam is a controlled substance, so the agent queues a nurse transfer. Open `/staff` in another tab to accept it. |
 
 ## Architecture
 
 ```text
-Browser (apps/web)
-  │ POST /api/calls/session
-  ▼
-API (apps/api) ──────────────── Postgres
-  │ LiveKit token + call row       ▲
-  │                                │ read models
-  ▼                                │
-LiveKit Cloud ◄──── WebRTC ─── Browser
-  │
-  ▼
-Agent worker (apps/agent)
-  Silero VAD → Deepgram STT → OpenRouter LLM → Deepgram TTS
-  │
-  ├─ CallOrchestrator → triage / intake / qualification / scheduling
-  ├─ ToolRegistry → caller, matter, appointment, and call-log services → Postgres
-  └─ EventService → Postgres CallEvent + Redis stream/pub-sub
-                                      │
-                                      ▼
-                             API SSE → Browser timeline
+Browser caller (apps/web /)          Staff (apps/web /staff)
+  │ POST /api/calls/session            │ GET /api/handoffs/stream (SSE)
+  ▼                                    │ POST /api/handoffs/:id/accept → room token
+API (apps/api) ── Postgres ◄───────────┤ POST /api/handoffs/:id/complete
+  │   ▲   └── Redis pub/sub ──┐        ▼
+  │   │ SSE /api/calls/:id/events/stream     LiveKit room (caller + agent + staff)
+  ▼   │                       │         ▲
+LiveKit Cloud ◄───────────────┼──── WebRTC ┘
+  │                           │
+  ▼                           │
+Agent worker (apps/agent)     │
+  core/      providers      AssemblyAI STT → DeepSeek LLM → Rime TTS, each with a
+                            LiveKit Inference fallback; startup key check
+             voiceSession   Silero VAD + LiveKit turn detector, endpointing, latency events
+             PhraseCache    pre-synthesized greeting, fillers, tool bridges and goodbye
+             toolFiller     plays a bridging line while a tool runs ("Let me check your coverage.")
+             CallSession    phases, intents, transcript, end-of-call
+             WarmTransfer   queue → hold → staff joins → spoken briefing → agent leaves
+             EventService   → recordCallEvent (packages/db): Postgres + Redis publish
+  verticals/clinic/
+             instructions   system prompt, transfer scripts, greeting/goodbye phrases
+             tools.ts       verify_patient, find/book/reschedule/cancel, list_my_appointments,
+                            check_insurance, list_medications, request_refill,
+                            transfer_to_staff, end_call
+             services/      scheduling (no double-booking), patients, coverage, prescriptions
+packages/shared   eligibility + refill rules, clinic time helpers, event types, latency stats
+packages/db       Prisma schema/client, seed, recordCallEvent (shared by agent and API)
 ```
 
-The API creates the `Call` row and mints a 15-minute LiveKit room token. The worker joins the room, owns the in-memory `CallState`, and constructs the active agent. The orchestrator validates phase transitions; agents can propose a handoff only through a tool. The worker records transcript turns and event rows, then publishes the same event payload to Redis. The API replays persisted events and forwards live per-call pub/sub messages over SSE.
+### Voice pipeline
 
-## Prerequisites
+- **Providers.** AssemblyAI (`universal-streaming-english`) transcribes, DeepSeek (`deepseek-chat`, through the OpenAI-compatible plugin) reasons, Rime (`mistv3`, measured ~365 ms to first audio) speaks. All are set in `.env`.
+- **Fallbacks.** Unless `PROVIDER_FALLBACK=off`, each provider is wrapped in a LiveKit fallback adapter that switches to LiveKit Inference (Deepgram, GPT-4.1-mini, Cartesia; billed to the LiveKit project) when the primary errors or times out, so a bad key or outage degrades the call instead of dropping it. Child-provider errors are kept from the session, which would otherwise close after three. At startup the worker checks the DeepSeek and AssemblyAI keys and logs `provider.key_invalid` for a bad one.
+- **Turn-taking.** Silero VAD plus LiveKit's turn detector decide when the caller is done, within `ENDPOINTING_MIN_DELAY_MS` (600, enough for AssemblyAI's final transcript) and `ENDPOINTING_MAX_DELAY_MS` (1200). Preemptive generation starts the reply from the interim transcript. Under two words spoken over the agent (`interruption.minWords: 2`) don't interrupt it, so backchannels like "mm-hm" are ignored.
+- **Fixed phrases.** The greeting (which tells the caller what Suzi can do), the lookup bridges, fillers and goodbye are synthesized once per worker process and played by code. On the first lookup of each caller turn the agent plays a line that fits the tool (`TOOL_BRIDGES` in `verticals/clinic/instructions.ts`: "Let me look at the schedule for you.", "Let me check your coverage." and so on), or a generic filler, so a lookup never sounds like dead air. Prewarm waits at most 3 s for the greeting (a slow TTS must not miss LiveKit's process-init timeout); anything not ready plays through live TTS. `end_call` plays the goodbye itself, so a call never ends in silence, and the agent stops listening once the call ends so a trailing "bye" can't start another turn.
 
-- Bun `1.3.13` (declared by the workspace) and Node.js `>=18`.
-- Docker for the local Postgres and Redis containers.
-- A LiveKit Cloud project: `LIVEKIT_URL`, `LIVEKIT_API_KEY`, and `LIVEKIT_API_SECRET`.
-- An OpenRouter API key: `OPENROUTER_API_KEY`.
-- A Deepgram API key: `DEEPGRAM_API_KEY`.
+### Calls, events and transfers
 
-The provider links are also recorded in [`.env.example`](.env.example): [LiveKit Cloud](https://cloud.livekit.io), [OpenRouter](https://openrouter.ai/keys), and [Deepgram](https://console.deepgram.com).
+- **Call lifecycle.** `POST /api/calls/session` creates the `Call` (ACTIVE) and a caller token; LiveKit auto-dispatches the agent. The agent moves the call through `GREETING → IDENTIFYING → SERVING → (TRANSFERRING) → COMPLETED | HANDED_OFF`. The API closes what the agent can't: staff completing a handoff, and a sweeper (every minute) that marks never-joined calls COMPLETED after 10 min and silent calls ERROR after 15 min.
+- **Events.** Every call event goes through `recordCallEvent` in `packages/db`: a `CallEvent` row in Postgres, then a publish on Redis channel `call-events:<callId>`. The API replays stored events and then relays the channel over SSE, so the console works for live and finished calls. Transfer requests also publish on `handoff-events` for the staff queue.
+- **Warm transfer.** `transfer_to_staff` creates a `Handoff` and publishes it to the staff queue. Accepting is a conditional update, so only one staff member can win. When a `staff-*` participant joins, the agent briefs them on the open line with the caller's verified name (or none if unverified) and the summary, then leaves without closing the room. The pipeline only listens to the caller, so staff speech never reaches the agent. If nobody accepts within `TRANSFER_TIMEOUT_SEC`, the agent takes the caller back and leaves a callback request; an accepted-but-not-joined transfer gets 30 s grace. A caller hanging up while queued cancels the handoff.
+
+### Design choices
+
+- **The LLM never makes business decisions.** Eligibility (`evaluateEligibility`) and refill outcomes (`evaluateRefill`) are plain functions in `packages/shared`. The model collects facts and calls tools.
+- **The model can't invent times or IDs.** Slot and appointment tools return short handles (`S1`, `A1`, or just `1`) that map to real rows for the duration of the call. Refills match on the exact drug name.
+- **Identity before data.** Every patient tool refuses until `verify_patient` matches date of birth and last name (ignoring case, spaces and punctuation), with nickname prefixes of at least two letters. Three failed attempts lock verification for the call.
+- **No double-booking.** Bookings run in a transaction that checks both the provider's and the patient's calendar, backed by a partial unique index on `(providerId, startsAt) WHERE status = 'SCHEDULED'`. A visit can only be rescheduled into a slot found for its own visit type, so its length never changes.
+- **Clinic-local time.** Date searches are interpreted in the clinic's timezone and walk local calendar days, so single-day searches, weekends and DST changes behave.
+- **Shared types, not runtime schemas, cross into the browser.** `CallEventPayload` is a plain interface; the web app imports `packages/shared` sources through `apps/web/lib/shared.ts`.
+
+### Testing
+
+- `bun run test` runs four suites: shared rules (unit), agent tools, scheduling and warm transfer (integration, real Postgres and Redis, isolated per test), API handoff race and stale-call sweeper (integration), and the web console's event folding (unit). No model calls.
+- `apps/agent`: `bun run evals` grades the real prompt and tools against DeepSeek deterministically; `bun run smoke` checks Rime and AssemblyAI; `bun run live-call` places a scripted voice call through LiveKit, optionally with a staff bot that accepts the transfer.
+
+## Latency
+
+Each agent reply emits a `latency.turn` event with this breakdown, all measured by the LiveKit Agents SDK:
+
+- **e2e:** caller stops speaking → first agent audio
+- **stt:** transcription delay
+- **endOfTurn:** end-of-turn decision delay
+- **llmTtft:** LLM time to first token
+- **ttsTtfb:** TTS time to first audio
+
+The caller screen doesn't show latency. Each call's page under `/calls` shows the per-turn breakdown, the summary at the top of `/calls` shows the median over recent calls, and `GET /api/metrics/latency` returns the raw numbers.
+
+Last snapshot (2026-10-08, from `/api/metrics/latency` over the 20 most recent calls):
+
+| Metric                                    | Value    |
+| ----------------------------------------- | -------- |
+| Median reply time (end of speech → audio) | 2,641 ms |
+| Turns measured                            | 64       |
+| Target                                    | 660 ms   |
+
+Each per-call view shows the last reply's end-to-end time against the 660 ms budget, p50/p90 for the call, and the split into speech to text (target 198 ms), end of turn, model time to first token (target 322 ms) and voice time to first audio (target 89 ms), plus a sparkline of every reply.
+
+These measurements predate the switch to AssemblyAI, DeepSeek and Rime (they used LiveKit Inference for all three stages); re-measure with `GET /api/metrics/latency` after a few calls. Spot checks from scripted calls on the new stack: end-of-turn 0.5–0.8 s, STT 0.5–0.8 s, LLM TTFT 0.4–0.8 s (GPT-4.1-mini fallback; the DeepSeek key was invalid at the time), Rime TTFB ~0.2–0.6 s after the first sentence of a call.
+
+| Stage      | Target | Measured (p50, 20 turns, worker on a laptop in India, LiveKit Cloud India South) |
+| ---------- | ------ | -------------------------------------------------------------------------------- |
+| End-to-end | 660 ms | ~2,170 ms (~1,400 ms on turns with no tool call)                                 |
+| STT        | 198 ms | ~250 ms                                                                          |
+| LLM TTFT   | 322 ms | ~780 ms                                                                          |
+| TTS TTFB   | 89 ms  | ~200 ms                                                                          |
+
+Tuning already applied:
+
+- Cloud turn detector with a 250 ms VAD silence window (Silero's default is 550 ms).
+- End-of-turn wait between 0.6 s (so AssemblyAI's final transcript lands first) and 1.2 s.
+- Rime `mistv3` instead of `arcana` (~365 ms vs 0.5–2.8 s to first audio, measured from India).
+- Preemptive generation.
+- A fixed greeting that skips the LLM.
+- `verify_patient` returns the patient's appointments and medications, which saves a tool round trip.
+- Pre-synthesized greeting, fillers and goodbye.
+
+What still blocks the 660 ms target:
+
+- **Region.** The models are served from the US. Every LLM and TTS request crosses India↔US, and the gateway's LLM TTFT floor measured from here was ~600 ms for every model tried. Deploy the worker in the same region as the inference providers.
+- **Tool turns.** Turns that call a tool pay for a second LLM pass.
+- **LLM speed.** A 322 ms TTFT generally needs a low-latency inference provider.
+- **Fallback cost.** While a primary provider is failing, each turn first spends time on the failed attempt before the fallback answers.
 
 ## Run locally
 
-Create the shared root environment file, then start the local infrastructure:
-
 ```bash
-cp .env.example .env
+cp .env.example .env          # add LiveKit URL/key/secret and the AssemblyAI, DeepSeek and Rime keys
 bun install
-
 docker compose up -d postgres redis
-bun run db:migrate
+bun run db:migrate            # or: cd packages/db && bunx dotenv -e ../../.env -- prisma migrate deploy
 bun run db:seed
+bun run dev                   # web :3000, api :4000, agent worker
 ```
 
-The seed creates a synthetic caller, a motor-vehicle matter, and a follow-up appointment. Start the workspace with:
+Open `http://localhost:3000`, click **Call Suzi**, allow the microphone, and press **OK** when Suzi is ready. For the refill scenario, open `http://localhost:3000/staff` in another tab and accept the transfer.
 
-```bash
-bun run dev
-```
-
-This starts the workspace development scripts: the web console on `http://localhost:3000`, the docs app on `http://localhost:3001`, the API on `http://localhost:4000`, and the agent worker. Because of the missing policy files described in [Status](#status), the API and web app can start, but the agent path needs that repository gap resolved before a call can complete.
-
-For an API smoke check:
-
-```bash
-curl http://localhost:4000/health
-```
-
-The response has the form:
-
-```json
-{ "status": "ok", "uptime": 0.123, "timestamp": "2026-01-01T00:00:00.000Z" }
-```
-
-Once the worker prerequisites are complete, open the web console, choose **Start Call**, allow microphone access, and use **Call History** to inspect the transcript, extracted fields, events, and appointment state.
-
-### Full Docker stack
-
-The Compose file also builds the `web`, `api`, and `agent` images:
-
-```bash
-docker compose up --build
-```
-
-The root `.env` file is still required. The web image receives its public API URL as a build argument; the LiveKit URL used by the browser is returned by the API session endpoint.
-
-## Configuration
-
-Use [`.env.example`](.env.example) as the starting point. The API and worker validate required values at startup.
-
-| Variable                      | Used by             | Default / purpose                                                   |
-| ----------------------------- | ------------------- | ------------------------------------------------------------------- |
-| `DATABASE_URL`                | API, worker, Prisma | Required. Local Compose value targets Postgres on `localhost:5432`. |
-| `REDIS_URL`                   | API, worker         | Required. Local Compose value targets Redis on `localhost:6379`.    |
-| `LIVEKIT_URL`                 | API, worker         | Required. LiveKit room URL.                                         |
-| `LIVEKIT_API_KEY`             | API, worker         | Required. Used by the API to sign room tokens.                      |
-| `LIVEKIT_API_SECRET`          | API, worker         | Required. Kept server-side for token signing.                       |
-| `OPENROUTER_API_KEY`          | Worker              | Required. Used for realtime LLM calls and structured extraction.    |
-| `OPENROUTER_MODEL`            | Worker              | Defaults to `openai/gpt-4o-mini` for the voice agent.               |
-| `OPENROUTER_EXTRACTION_MODEL` | Worker              | Defaults to `openai/gpt-4o-mini` for extraction and summaries.      |
-| `DEEPGRAM_API_KEY`            | Worker              | Required. Used for Nova-3 STT and Aura Asteria English TTS.         |
-| `API_PORT`                    | API                 | Defaults to `4000`.                                                 |
-| `CORS_ORIGIN`                 | API                 | Defaults to `http://localhost:3000`.                                |
-| `NEXT_PUBLIC_API_URL`         | Web                 | Defaults to `http://localhost:4000`.                                |
-
-`NEXT_PUBLIC_LIVEKIT_URL` is present in [`.env.example`](.env.example) and is passed to the web Docker build, but the current browser code uses the `url` returned by `POST /api/calls/session` instead.
+If ports 5432/6379/3000 are taken, set `POSTGRES_HOST_PORT`, `REDIS_HOST_PORT` (and update `DATABASE_URL`/`REDIS_URL`), and run the web app on another port with a matching `CORS_ORIGIN`.
 
 ## API
 
-The Express API is mounted from [`apps/api/src/app.ts`](apps/api/src/app.ts).
+| Method | Route                          | Purpose                                                           |
+| ------ | ------------------------------ | ----------------------------------------------------------------- |
+| `GET`  | `/health`                      | Health check.                                                     |
+| `POST` | `/api/calls/session`           | Create a call and mint a caller LiveKit token.                    |
+| `GET`  | `/api/calls`                   | Recent calls, with patient, intents, and p50 latency.             |
+| `GET`  | `/api/calls/:id`               | Call detail: transcript, events, handoffs, appointments, refills. |
+| `GET`  | `/api/calls/:id/events`        | All stored events for a call (JSON).                              |
+| `GET`  | `/api/calls/:id/events/stream` | SSE: replay + live call events.                                   |
+| `GET`  | `/api/providers`               | The care team (name, specialty, working days) for the landing page. |
+| `GET`  | `/api/patients/:id`            | Patient chart: upcoming appointments, insurance, prescriptions.   |
+| `GET`  | `/api/handoffs`                | Active transfer queue (`?status=WAITING,ACCEPTED`).               |
+| `GET`  | `/api/handoffs/stream`         | SSE: queue snapshots for the staff console.                       |
+| `POST` | `/api/handoffs/:id/accept`     | Claim a transfer (409 if taken); returns a staff room token.      |
+| `POST` | `/api/handoffs/:id/complete`   | Staff ends the call.                                              |
+| `GET`  | `/api/metrics/latency`         | Latency summary over recent calls.                                |
 
-| Method | Route                          | Purpose                                                                                 |
-| ------ | ------------------------------ | --------------------------------------------------------------------------------------- |
-| `GET`  | `/health`                      | Return API health, uptime, and timestamp.                                               |
-| `POST` | `/api/calls/session`           | Create a call row and mint a LiveKit token. Accepts optional `{ "callerName": "..." }`. |
-| `GET`  | `/api/calls`                   | List the most recent calls, up to 50.                                                   |
-| `GET`  | `/api/calls/:id`               | Return a call with caller, matter, appointments, transcript turns, and events.          |
-| `GET`  | `/api/calls/:id/events`        | Return persisted events for a call.                                                     |
-| `GET`  | `/api/calls/:id/events/stream` | Replay persisted events, then stream `call-event` SSE messages.                         |
-| `GET`  | `/api/matters/:id`             | Return a matter with its caller and appointments.                                       |
+## Adding another vertical
 
-Example session request:
+Implement `Vertical` (`apps/agent/src/core/Vertical.ts`):
 
-```bash
-curl -s -X POST http://localhost:4000/api/calls/session \
-  -H 'Content-Type: application/json' \
-  -d '{"callerName":"Prospective Caller"}'
-```
+- a name and an agent label
+- `keyterms` that bias speech-to-text toward your domain vocabulary
+- `phrases`: the greeting, fillers and optional goodbye, pre-synthesized at worker start
+- `fillerSkipTools`: tools that speak for themselves and shouldn't trigger a filler
+- `createAgent({ call, transfer, phrases })`, which returns a LiveKit `Agent` with your instructions and tools; wrap tools with `instrumentedTool` so they show up in the timeline
+- the two transfer scripts (`introduction` receives the verified caller's name, or null)
 
-The response contains `callId`, `roomName`, `identity`, `token`, and the LiveKit `url`.
-
-## How the call works
-
-### Agent control flow
-
-`CallOrchestrator` owns the phase machine in `packages/shared/src/phases.ts`:
-
-```text
-GREETING → TRIAGE → INTAKE → QUALIFICATION → SCHEDULING → CONFIRMATION → COMPLETED
-```
-
-The allowed transitions also include returning from qualification to intake, ending from earlier phases, and entering error recovery. The LLM proposes handoffs through tools; `CallOrchestrator` checks each transition before constructing the next agent.
-
-After each final caller transcript, the worker sends a rolling excerpt of recent caller turns and already-known fields to OpenRouter. The result is validated against `intakeFieldsSchema`. Extraction runs in the background so the spoken reply is not held up; qualification waits for the pending extraction before evaluating the fields.
-
-Qualification is code in `packages/shared/src/intake.ts`:
-
-- `QUALIFIED` requires at least one injury, a supported incident type (`motor_vehicle_accident`, `slip_and_fall`, `workplace_injury`, or `dog_bite`), and a known incident date.
-- `DISQUALIFIED` is returned when the caller is already represented by an attorney.
-- Otherwise the result is `INSUFFICIENT`, with reasons for the missing criteria.
-
-These rules describe the demo implementation. They do not assess the legal merits of a case.
-
-### Persistence and events
-
-Prisma models `Caller`, `Matter`, `Appointment`, `Call`, `TranscriptTurn`, and `CallEvent` in [`packages/db/prisma/schema.prisma`](packages/db/prisma/schema.prisma). `EventService` writes a `CallEvent` row, appends the serialized event to the Redis `call-events` stream, and publishes it on the per-call `call-events:<callId>` channel. `EventStreamService` bridges that channel to the browser with SSE.
-
-## Repository layout
-
-```text
-apps/
-  web/       Next.js live call console, call history, and call detail views
-  api/       Express session, read-model, health, and SSE endpoints
-  agent/     LiveKit worker, orchestrator, agents, tools, policies, and services
-  docs/      Separate Next.js app from the workspace scaffold
-packages/
-  db/        Prisma schema, migration, client, and synthetic seed
-  shared/    Zod schemas, phases, events, tool contracts, logging, env loading
-  ui/        Reusable React components used by the docs app
-  eslint-config/ and typescript-config/ shared workspace configuration
-docs/video/  Standalone HTML architecture and implementation explainers
-```
+Then point `entry.ts` at it. Domain events go through `call.emit(...)`.
 
 ## Development checks
 
-The workspace scripts come from the root [`package.json`](package.json):
-
 ```bash
-bun run check-types
-bun run build
-bun run db:studio
+bun run test                  # shared rules, agent tools + warm transfer, API handoffs + sweeper, web state (no model calls)
+bunx turbo run check-types    # all packages
+bun run lint                  # all packages
+cd apps/agent && bun run smoke   # live: Rime TTS + AssemblyAI STT, fraction of a cent
+cd apps/agent && bun run evals   # live: 22 DeepSeek behavior evals, ~$0.01 per run
+cd apps/agent && bun run live-call # live: scripted voice call through LiveKit (needs api + agent running)
 ```
 
-`bun run db:studio` opens Prisma Studio against the configured Postgres database.
+In `apps/agent`, `TEST_NOW=2026-10-30T20:50:00Z bun run test` runs the tests at a fixed clock (weekends, closing time, DST). `bun run evals <filter>` runs only matching scenarios; `EVAL_BUDGET_USD` caps spend (default $0.05). Evals use the real instructions and tools against the local DB and grade deterministically (tool calls, arguments, spoken text).
 
-There are no automated tests in this repository. A root `bun run lint` script exists, but on a clean install it currently stops in `apps/api`, `apps/agent`, and `packages/shared` because those packages invoke `eslint` without declaring an available `eslint` binary. The `web`, `docs`, and `ui` lint scripts do not show that error in the current checkout.
+The agent and API tests run against the local Postgres and Redis from `.env`, so start them and seed first. They create and clean up their own rows.
 
 ## License
 
