@@ -1,36 +1,24 @@
-
-
-
-
-
-
-
-
+// Generic call lifecycle shared by every vertical. A vertical decides when to
+// move between phases; the orchestrator only enforces that the move is legal.
 export const CallPhase = {
   GREETING: "GREETING",
-  TRIAGE: "TRIAGE",
-  INTAKE: "INTAKE",
-  QUALIFICATION: "QUALIFICATION",
-  SCHEDULING: "SCHEDULING",
-  CONFIRMATION: "CONFIRMATION",
+  IDENTIFYING: "IDENTIFYING",
+  SERVING: "SERVING",
+  TRANSFERRING: "TRANSFERRING",
+  HANDED_OFF: "HANDED_OFF",
   COMPLETED: "COMPLETED",
-  HANDOFF_HUMAN: "HANDOFF_HUMAN",
-  ERROR_RECOVERY: "ERROR_RECOVERY",
 } as const;
 
 export type CallPhase = (typeof CallPhase)[keyof typeof CallPhase];
 
-
 export const PHASE_TRANSITIONS: Record<CallPhase, CallPhase[]> = {
-  GREETING: [CallPhase.TRIAGE, CallPhase.ERROR_RECOVERY],
-  TRIAGE: [CallPhase.INTAKE, CallPhase.HANDOFF_HUMAN, CallPhase.COMPLETED, CallPhase.ERROR_RECOVERY],
-  INTAKE: [CallPhase.QUALIFICATION, CallPhase.HANDOFF_HUMAN, CallPhase.COMPLETED, CallPhase.ERROR_RECOVERY],
-  QUALIFICATION: [CallPhase.SCHEDULING, CallPhase.INTAKE, CallPhase.HANDOFF_HUMAN, CallPhase.COMPLETED, CallPhase.ERROR_RECOVERY],
-  SCHEDULING: [CallPhase.CONFIRMATION, CallPhase.INTAKE, CallPhase.HANDOFF_HUMAN, CallPhase.ERROR_RECOVERY],
-  CONFIRMATION: [CallPhase.COMPLETED, CallPhase.ERROR_RECOVERY],
+  GREETING: [CallPhase.IDENTIFYING, CallPhase.SERVING, CallPhase.TRANSFERRING, CallPhase.COMPLETED],
+  IDENTIFYING: [CallPhase.SERVING, CallPhase.TRANSFERRING, CallPhase.COMPLETED],
+  SERVING: [CallPhase.IDENTIFYING, CallPhase.TRANSFERRING, CallPhase.COMPLETED],
+  // A transfer can time out or be declined, returning the caller to the agent.
+  TRANSFERRING: [CallPhase.HANDED_OFF, CallPhase.SERVING, CallPhase.COMPLETED],
+  HANDED_OFF: [CallPhase.COMPLETED],
   COMPLETED: [],
-  HANDOFF_HUMAN: [],
-  ERROR_RECOVERY: [CallPhase.TRIAGE, CallPhase.INTAKE, CallPhase.COMPLETED],
 };
 
 export function isTransitionAllowed(from: CallPhase, to: CallPhase): boolean {
@@ -38,22 +26,11 @@ export function isTransitionAllowed(from: CallPhase, to: CallPhase): boolean {
   return PHASE_TRANSITIONS[from]?.includes(to) ?? false;
 }
 
-export const AgentName = {
-  TRIAGE: "TRIAGE",
-  INTAKE: "INTAKE",
-  QUALIFICATION: "QUALIFICATION",
-  SCHEDULING: "SCHEDULING",
-} as const;
-
-export type AgentName = (typeof AgentName)[keyof typeof AgentName];
-
-
 export const TurnState = {
   LISTENING: "LISTENING",
   THINKING: "THINKING",
   SPEAKING: "SPEAKING",
   INTERRUPTED: "INTERRUPTED",
-  TOOL_EXECUTING: "TOOL_EXECUTING",
   ENDED: "ENDED",
 } as const;
 

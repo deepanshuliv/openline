@@ -18,7 +18,8 @@
     "check-types": "tsc --noEmit"
   },
   "dependencies": {
-    "@prisma/client": "6.19.3"
+    "@prisma/client": "6.19.3",
+    "@repo/shared": "*"
   },
   "devDependencies": {
     "@repo/typescript-config": "*",

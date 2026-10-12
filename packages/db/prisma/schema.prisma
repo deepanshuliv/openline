@@ -1,8 +1,3 @@
-
-
-
-
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -12,112 +7,44 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-enum MatterStatus {
-  INTAKE
-  QUALIFIED
-  DISQUALIFIED
-  SCHEDULED
-  CLOSED
-}
-
-enum QualificationStatus {
-  PENDING
-  QUALIFIED
-  INSUFFICIENT
-  DISQUALIFIED
-}
-
-enum AppointmentStatus {
-  SCHEDULED
-  CONFIRMED
-  CANCELLED
-}
+// ---------------------------------------------------------------------------
+// Core call telemetry (vertical-agnostic)
+// ---------------------------------------------------------------------------
 
 enum CallStatus {
   ACTIVE
   COMPLETED
-  HANDOFF_HUMAN
+  HANDED_OFF
   ERROR
 }
 
 enum Speaker {
   CALLER
   AGENT
+  STAFF
   SYSTEM
 }
 
-model Caller {
-  id                String   @id @default(cuid())
-  name              String?
-  phone             String?  @unique
-  email             String?
-  preferredLanguage String?  @default("en")
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
-
-  matters Matter[]
-  calls   Call[]
-}
-
-model Matter {
-  id       String @id @default(cuid())
-  callerId String
-  caller   Caller @relation(fields: [callerId], references: [id])
-
-  status                    MatterStatus @default(INTAKE)
-  incidentType              String?
-  incidentDate              DateTime?
-  incidentLocation          String?
-  incidentDescription       String?
-  injuries                  String[]    @default([])
-  treatmentReceived         String?
-  emergencyServicesInvolved Boolean?
-  policeReport              Boolean?
-  insuranceInformation      String?
-  otherPartyInformation     String?
-  witnesses                 String?
-  lostWages                 Boolean?
-  representedByAttorney     Boolean?
-  notes                     String?
-  qualificationStatus       QualificationStatus @default(PENDING)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  calls        Call[]
-  appointments Appointment[]
-}
-
-model Appointment {
-  id             String            @id @default(cuid())
-  matterId       String
-  matter         Matter            @relation(fields: [matterId], references: [id])
-  scheduledAt    DateTime
-  type           String
-  status         AppointmentStatus @default(SCHEDULED)
-
-  idempotencyKey String            @unique
-  createdAt      DateTime          @default(now())
-}
-
 model Call {
-  id       String  @id @default(cuid())
-  callerId String?
-  caller   Caller? @relation(fields: [callerId], references: [id])
-  matterId String?
-  matter   Matter? @relation(fields: [matterId], references: [id])
-
+  id           String     @id @default(cuid())
   roomName     String     @unique
   startedAt    DateTime   @default(now())
   endedAt      DateTime?
   status       CallStatus @default(ACTIVE)
   finalSummary String?
+  intents      String[]   @default([])
+
+  patientId String?
+  patient   Patient? @relation(fields: [patientId], references: [id])
 
   transcriptTurns TranscriptTurn[]
   events          CallEvent[]
+  handoffs        Handoff[]
+  appointments    Appointment[]
+  refillRequests  RefillRequest[]
 
-  @@index([callerId])
-  @@index([matterId])
+  @@index([patientId])
+  @@index([startedAt])
 }
 
 model TranscriptTurn {
@@ -144,4 +71,179 @@ model CallEvent {
 
   @@index([callId])
   @@index([type])
+}
+
+enum HandoffStatus {
+  WAITING
+  ACCEPTED
+  COMPLETED
+  TIMED_OUT
+  CANCELLED
+}
+
+// A live warm transfer from the agent to a human staff member.
+model Handoff {
+  id            String        @id @default(cuid())
+  callId        String
+  call          Call          @relation(fields: [callId], references: [id])
+  department    String
+  reason        String
+  summary       String
+  status        HandoffStatus @default(WAITING)
+  staffIdentity String?
+  staffName     String?
+  requestedAt   DateTime      @default(now())
+  acceptedAt    DateTime?
+  endedAt       DateTime?
+
+  patientId String?
+  patient   Patient? @relation(fields: [patientId], references: [id])
+
+  @@index([status])
+  @@index([callId])
+}
+
+// ---------------------------------------------------------------------------
+// Clinic vertical
+// ---------------------------------------------------------------------------
+
+model Patient {
+  id                String    @id @default(cuid())
+  firstName         String
+  lastName          String
+  dateOfBirth       DateTime  @db.Date
+  phone             String?   @unique
+  email             String?
+  preferredPharmacy String?
+  lastVisitAt       DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  primaryProviderId String?
+  primaryProvider   Provider? @relation(fields: [primaryProviderId], references: [id])
+
+  appointments   Appointment[]
+  insurancePlans InsurancePlan[]
+  prescriptions  Prescription[]
+  refillRequests RefillRequest[]
+  calls          Call[]
+  handoffs       Handoff[]
+
+  @@index([lastName, dateOfBirth])
+}
+
+model Provider {
+  id                 String  @id @default(cuid())
+  name               String
+  title              String
+  specialty          String
+  acceptsNewPatients Boolean @default(true)
+  // ISO weekdays (1 = Monday ... 5 = Friday) the provider sees patients.
+  workDays           Int[]
+
+  patients      Patient[]
+  appointments  Appointment[]
+  prescriptions Prescription[]
+}
+
+enum AppointmentStatus {
+  SCHEDULED
+  CANCELLED
+  COMPLETED
+}
+
+model Appointment {
+  id           String            @id @default(cuid())
+  patientId    String
+  patient      Patient           @relation(fields: [patientId], references: [id])
+  providerId   String
+  provider     Provider          @relation(fields: [providerId], references: [id])
+  startsAt     DateTime
+  endsAt       DateTime
+  visitType    String
+  reason       String?
+  status       AppointmentStatus @default(SCHEDULED)
+  cancelReason String?
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+
+  // Set on the replacement appointment when one is rescheduled.
+  rescheduledFromId String?   @unique
+  rescheduledFrom   Appointment?  @relation("Reschedule", fields: [rescheduledFromId], references: [id])
+  rescheduledTo     Appointment?  @relation("Reschedule")
+
+  callId String?
+  call   Call?   @relation(fields: [callId], references: [id])
+
+  // A partial unique index (providerId, startsAt) WHERE status = 'SCHEDULED'
+  // is added in the migration SQL to prevent double-booking.
+  @@index([patientId, status])
+  @@index([providerId, startsAt])
+}
+
+model InsurancePlan {
+  id                   String    @id @default(cuid())
+  patientId            String
+  patient              Patient   @relation(fields: [patientId], references: [id])
+  payer                String
+  planName             String
+  memberId             String
+  groupNumber          String?
+  isPrimary            Boolean   @default(true)
+  active               Boolean   @default(true)
+  inNetwork            Boolean   @default(true)
+  effectiveFrom        DateTime  @db.Date
+  effectiveTo          DateTime? @db.Date
+  primaryCopayCents    Int
+  specialistCopayCents Int
+  preventiveCovered    Boolean   @default(true)
+  deductibleCents      Int
+  deductibleMetCents   Int       @default(0)
+  coinsurancePct       Int       @default(0)
+  priorAuthVisitTypes  String[]  @default([])
+
+  @@index([patientId])
+}
+
+model Prescription {
+  id               String    @id @default(cuid())
+  patientId        String
+  patient          Patient   @relation(fields: [patientId], references: [id])
+  prescriberId     String
+  prescriber       Provider  @relation(fields: [prescriberId], references: [id])
+  drugName         String
+  strength         String
+  directions       String
+  controlled       Boolean   @default(false)
+  refillsRemaining Int
+  daysSupply       Int
+  lastFilledAt     DateTime?
+  active           Boolean   @default(true)
+
+  refillRequests RefillRequest[]
+
+  @@index([patientId])
+}
+
+enum RefillStatus {
+  SUBMITTED
+  ESCALATED
+}
+
+model RefillRequest {
+  id             String       @id @default(cuid())
+  prescriptionId String
+  prescription   Prescription @relation(fields: [prescriptionId], references: [id])
+  patientId      String
+  patient        Patient      @relation(fields: [patientId], references: [id])
+  outcome        String
+  status         RefillStatus
+  pharmacy       String?
+  notes          String?
+  createdAt      DateTime     @default(now())
+
+  callId String?
+  call   Call?   @relation(fields: [callId], references: [id])
+
+  @@index([patientId])
 }
