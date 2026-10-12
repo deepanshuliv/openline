@@ -15,10 +15,11 @@
       "version": "0.0.0",
       "dependencies": {
         "@livekit/agents": "1.6.3",
-        "@livekit/agents-plugin-deepgram": "1.6.3",
+        "@livekit/agents-plugin-assemblyai": "1.6.3",
         "@livekit/agents-plugin-openai": "1.6.3",
+        "@livekit/agents-plugin-rime": "1.6.3",
         "@livekit/agents-plugin-silero": "1.6.3",
-        "@openrouter/sdk": "^1.2.27",
+        "@livekit/rtc-node": "^0.13.33",
         "@repo/db": "*",
         "@repo/shared": "*",
         "ioredis": "^6.0.0",
@@ -29,6 +30,7 @@
         "@repo/typescript-config": "*",
         "@types/node": "^22.15.3",
         "dotenv-cli": "^11.0.0",
+        "eslint": "^9.39.1",
         "tsx": "^4.23.12",
         "typescript": "5.9.2",
       },
@@ -52,26 +54,8 @@
         "@types/express": "^5.0.6",
         "@types/node": "^22.15.3",
         "dotenv-cli": "^11.0.0",
-        "tsx": "^4.23.12",
-        "typescript": "5.9.2",
-      },
-    },
-    "apps/docs": {
-      "name": "docs",
-      "version": "0.1.0",
-      "dependencies": {
-        "@repo/ui": "*",
-        "next": "16.3.0",
-        "react": "^19.2.0",
-        "react-dom": "^19.2.0",
-      },
-      "devDependencies": {
-        "@repo/eslint-config": "*",
-        "@repo/typescript-config": "*",
-        "@types/node": "^22.15.3",
-        "@types/react": "19.2.2",
-        "@types/react-dom": "19.2.2",
         "eslint": "^9.39.1",
+        "tsx": "^4.23.12",
         "typescript": "5.9.2",
       },
     },
@@ -80,7 +64,7 @@
       "version": "0.1.0",
       "dependencies": {
         "@livekit/components-react": "^2.9.24",
-        "@livekit/components-styles": "^1.2.0",
+        "@phosphor-icons/react": "^2.1.10",
         "@repo/shared": "*",
         "livekit-client": "^2.21.0",
         "next": "16.3.0",
@@ -103,6 +87,7 @@
       "version": "0.0.0",
       "dependencies": {
         "@prisma/client": "6.19.3",
+        "@repo/shared": "*",
       },
       "devDependencies": {
         "@repo/typescript-config": "*",
@@ -140,29 +125,13 @@
         "@repo/eslint-config": "*",
         "@repo/typescript-config": "*",
         "@types/node": "^22.15.3",
+        "eslint": "^9.39.1",
         "typescript": "5.9.2",
       },
     },
     "packages/typescript-config": {
       "name": "@repo/typescript-config",
       "version": "0.0.0",
-    },
-    "packages/ui": {
-      "name": "@repo/ui",
-      "version": "0.0.0",
-      "dependencies": {
-        "react": "^19.2.0",
-        "react-dom": "^19.2.0",
-      },
-      "devDependencies": {
-        "@repo/eslint-config": "*",
-        "@repo/typescript-config": "*",
-        "@types/node": "^22.15.3",
-        "@types/react": "19.2.2",
-        "@types/react-dom": "19.2.2",
-        "eslint": "^9.39.1",
-        "typescript": "5.9.2",
-      },
     },
   },
   "packages": {
@@ -316,9 +285,11 @@
 
     "@livekit/agents": ["@livekit/agents@1.6.3", "", { "dependencies": { "@bufbuild/protobuf": "^1.10.0", "@livekit/av": "^10.0.0", "@livekit/local-inference": "^0.2.6", "@livekit/mutex": "^1.1.1", "@livekit/protocol": "^1.50.4", "@livekit/throws-transformer": "0.1.8", "@livekit/typed-emitter": "^3.0.0", "@opentelemetry/api": "^1.9.0", "@opentelemetry/api-logs": "^0.220.0", "@opentelemetry/core": "^2.8.0", "@opentelemetry/exporter-logs-otlp-proto": "^0.220.0", "@opentelemetry/exporter-trace-otlp-proto": "^0.220.0", "@opentelemetry/instrumentation-pino": "^0.66.0", "@opentelemetry/otlp-exporter-base": "^0.220.0", "@opentelemetry/resources": "^2.8.0", "@opentelemetry/sdk-logs": "^0.220.0", "@opentelemetry/sdk-trace-base": "^2.8.0", "@opentelemetry/sdk-trace-node": "^2.8.0", "@opentelemetry/semantic-conventions": "^1.28.0", "@types/pidusage": "^2.0.5", "commander": "^12.0.0", "fluent-ffmpeg": "^2.1.3", "form-data": "^4.0.5", "heap-js": "^2.6.0", "json-schema": "^0.4.0", "jsonrepair": "^3.14.0", "livekit-server-sdk": "^2.14.1", "ofetch": "^1.5.1", "openai": "^6.8.1", "pidusage": "^4.0.1", "pino": "^8.19.0", "pino-pretty": "^11.0.0", "sharp": "0.35.3", "ws": "^8.21.0", "zod-to-json-schema": "^3.24.6" }, "peerDependencies": { "@livekit/rtc-node": "^0.13.33", "zod": "^3.25.76 || ^4.1.8" }, "bin": { "livekit-agents": "./dist/bin/livekit-agents.js" } }, "sha512-15PTtmyP+fuUe3i83E2VOFW3pfeI/A+R7USqDVV83tc7O7Rd8XGizWob3zjUQ4cfhqrmR1ApYsDJjUgA/AIj4g=="],
 
-    "@livekit/agents-plugin-deepgram": ["@livekit/agents-plugin-deepgram@1.6.3", "", { "dependencies": { "ws": "^8.21.0" }, "peerDependencies": { "@livekit/agents": "1.6.3", "@livekit/rtc-node": "^0.13.33" } }, "sha512-Jrl9mHLAxTz6bBpF0ZBp85tgxQLYRYyVO9UlT3xyht5HdCRte6RpgkyS+W9NXzZ7N50tfU8jcMPmnnLMBkRA7A=="],
+    "@livekit/agents-plugin-assemblyai": ["@livekit/agents-plugin-assemblyai@1.6.3", "", { "dependencies": { "ws": "^8.21.1" }, "peerDependencies": { "@livekit/agents": "1.6.3", "@livekit/rtc-node": "^0.13.33" } }, "sha512-TnUg3JnG8LVZfF4o3hBnei2HNTybRRKJmZETPEqF4j9PQuri77eDEyE9A7eExu7UmTWj+YXiYb6QC0zdvMv8IA=="],
 
     "@livekit/agents-plugin-openai": ["@livekit/agents-plugin-openai@1.6.3", "", { "dependencies": { "@livekit/mutex": "^1.1.1", "openai": "^6.8.1", "ws": "^8.21.0" }, "peerDependencies": { "@livekit/agents": "1.6.3", "@livekit/rtc-node": "^0.13.33", "zod": "^3.25.76 || ^4.1.8" } }, "sha512-hYlMtpnc8jA5gIyWo0MkBgQtYGFy2qlBveISjibj0iREG1Kd8PAQYlhghjexYc1ZQMG6/EBeSS2UerTBjyxKZg=="],
+
+    "@livekit/agents-plugin-rime": ["@livekit/agents-plugin-rime@1.6.3", "", { "dependencies": { "ws": "^8.21.0" }, "peerDependencies": { "@livekit/agents": "1.6.3", "@livekit/rtc-node": "^0.13.33" } }, "sha512-EnkZ3w1i0AZbXuUeLTx4fvu3lOAFjZY9uarQOMVK5PBXg248rdQJ7y3fJXnOZRaRc8kO1m7A2zwgP6ALZbc9Xw=="],
 
     "@livekit/agents-plugin-silero": ["@livekit/agents-plugin-silero@1.6.3", "", { "dependencies": { "onnxruntime-node": "1.24.3", "ws": "^8.21.0" }, "peerDependencies": { "@livekit/agents": "1.6.3", "@livekit/rtc-node": "^0.13.33" } }, "sha512-0aOP6rvci+bdnhyq2n44ZvTTvdmFBRMqJ9iPBnettRSTmyXDZfyFyID4YBiNZ4UwceMrny8uM+AelW182m2SKw=="],
 
@@ -337,8 +308,6 @@
     "@livekit/components-core": ["@livekit/components-core@0.12.15", "", { "dependencies": { "@floating-ui/dom": "1.7.6", "loglevel": "1.9.1", "rxjs": "7.8.2" }, "peerDependencies": { "livekit-client": "^2.20.1", "tslib": "^2.6.2" } }, "sha512-bDkK+jkPMgyT4a5lZmdcuc/hZ8fZUrXW+qQPNHVeSpXCBMzk5q9QWzx+HPtTsPJ8hnncWGfoT81RnXHBsy+Z8g=="],
 
     "@livekit/components-react": ["@livekit/components-react@2.9.24", "", { "dependencies": { "@livekit/components-core": "0.12.15", "clsx": "2.1.1", "events": "^3.3.0", "jose": "^6.0.12", "usehooks-ts": "3.1.1" }, "peerDependencies": { "@livekit/krisp-noise-filter": "^0.2.12 || ^0.3.0 || ^0.4.0", "livekit-client": "^2.20.1", "react": ">=18", "react-dom": ">=18", "tslib": "^2.6.2" }, "optionalPeers": ["@livekit/krisp-noise-filter"] }, "sha512-qw5Oy1EfPg1f/xrKYrFielSrmtxY8BZ9mDt6299G5aikotQIztmldBfTNosrVS7VSNit7qeYfOFSyKaML20W6Q=="],
-
-    "@livekit/components-styles": ["@livekit/components-styles@1.2.0", "", {}, "sha512-74/rt0lDh6aHmOPmWAeDE9C4OrNW9RIdmhX/YRbovQBVNGNVWojRjl3FgQZ5LPFXO6l1maKB4JhXcBFENVxVvw=="],
 
     "@livekit/local-inference": ["@livekit/local-inference@0.2.6", "", { "dependencies": { "node-gyp-build": "^4.8.0" }, "optionalDependencies": { "@livekit/local-inference-darwin-arm64": "0.2.6", "@livekit/local-inference-darwin-x64": "0.2.6", "@livekit/local-inference-linux-arm64-gnu": "0.2.6", "@livekit/local-inference-linux-x64-gnu": "0.2.6", "@livekit/local-inference-win32-x64-msvc": "0.2.6" } }, "sha512-HtA5tC+gdDHoWAkb0QJYVCIoLL6/53VGXVoRY68zIeTUik9kAW/EOuYirEqRuGlL2UCzjWRRhRSkxLleLyucmQ=="],
 
@@ -400,8 +369,6 @@
 
     "@nodelib/fs.walk": ["@nodelib/fs.walk@1.2.8", "", { "dependencies": { "@nodelib/fs.scandir": "2.1.5", "fastq": "^1.6.0" } }, "sha512-oGB+UxlgWcgQkgwo8GcEGwemoTFt3FIO9ababBmaGwXIoBKZ+GTy0pP185beGg7Llih/NSHSV2XAs1lnznocSg=="],
 
-    "@openrouter/sdk": ["@openrouter/sdk@1.2.27", "", { "dependencies": { "zod": "^3.25.0 || ^4.0.0" } }, "sha512-qSX6Ps4v8AzP4gdcV5Pg7smmzFDdDqRX3VaMpecLYwCqsLBNijybKDUvIxq/uB0xeY2+LmVuthfE/1IOfyFKlg=="],
-
     "@opentelemetry/api": ["@opentelemetry/api@1.9.1", "", {}, "sha512-gLyJlPHPZYdAk1JENA9LeHejZe1Ti77/pTeFm/nMXmQH/HFZlcS/O2XJB+L8fkbrNSqhdtlvjBVjxwUYanNH5Q=="],
 
     "@opentelemetry/api-logs": ["@opentelemetry/api-logs@0.220.0", "", { "dependencies": { "@opentelemetry/api": "^1.3.0" } }, "sha512-CmVa4ImJ+ynfrPMNaAXHET6Bhb44SwzmfyVJFq9ni2jgXJR/l7C6gfVFddNmHP+ZOkP9cf4f9DBe68qVLTHc9w=="],
@@ -436,6 +403,8 @@
 
     "@opentelemetry/semantic-conventions": ["@opentelemetry/semantic-conventions@1.43.0", "", {}, "sha512-eSYWTm620tTk45EKSedaUL8MFYI8hW164hIXsgIHyxu3VobUB3fFCu5t0hQby6OoWRPsG1KkKUG2M5UadiLiVg=="],
 
+    "@phosphor-icons/react": ["@phosphor-icons/react@2.1.10", "", { "peerDependencies": { "react": ">= 16.8", "react-dom": ">= 16.8" } }, "sha512-vt8Tvq8GLjheAZZYa+YG/pW7HDbov8El/MANW8pOAz4eGxrwhnbfrQZq0Cp4q8zBEu8NIhHdnr+r8thnfRSNYA=="],
+
     "@pinojs/redact": ["@pinojs/redact@0.4.0", "", {}, "sha512-k2ENnmBugE/rzQfEcdWHcCY+/FM3VLzH9cYEsbdsoqrvzAKRhUZeRNhAZvB8OitQJ1TBed3yqWtdjzS6wJKBwg=="],
 
     "@prisma/client": ["@prisma/client@6.19.3", "", { "peerDependencies": { "prisma": "*", "typescript": ">=5.1.0" }, "optionalPeers": ["prisma", "typescript"] }, "sha512-mKq3jQFhjvko5LTJFHGilsuQs+W+T3Gm451NzuTDGQxwCzwXHYnIu2zGkRoW+Exq3Rob7yp2MfzSrdIiZVhrBg=="],
@@ -459,8 +428,6 @@
     "@repo/shared": ["@repo/shared@workspace:packages/shared"],
 
     "@repo/typescript-config": ["@repo/typescript-config@workspace:packages/typescript-config"],
-
-    "@repo/ui": ["@repo/ui@workspace:packages/ui"],
 
     "@standard-schema/spec": ["@standard-schema/spec@1.1.0", "", {}, "sha512-l2aFy5jALhniG5HgqrD6jXLi/rUWrKvqN/qJx6yoJsgKhblVd+iqqU4RCXavm/jPityDo5TCvKMnpjKnOriy0w=="],
 
@@ -681,8 +648,6 @@
     "detect-libc": ["detect-libc@2.1.2", "", {}, "sha512-Btj2BOOO83o3WyH59e8MgXsxEQVcarkUOpEYrubB0urwnN10yQ364rsiByU11nZlqWYZm05i/of7io4mzihBtQ=="],
 
     "detect-node": ["detect-node@2.1.0", "", {}, "sha512-T0NIuQpnTvFDATNuHN5roPwSBG83rFsuO+MXXH9/3N1eFbn4wcPjttvjMLEPWJ0RGUYgQE7cGgS3tNxbqCGM7g=="],
-
-    "docs": ["docs@workspace:apps/docs"],
 
     "doctrine": ["doctrine@2.1.0", "", { "dependencies": { "esutils": "^2.0.2" } }, "sha512-35mSku4ZXK0vfCuHEDAwt55dg2jNajHZ1odvF+8SSr82EsZY4QmXfuWso8oEd8zRhVObSN18aM0CjSdoBX7zIw=="],
 
