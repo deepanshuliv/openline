@@ -1,27 +1,16 @@
 import type { CSSProperties } from "react";
 
-export type OrbState = "idle" | "connecting" | "listening" | "thinking" | "speaking" | "error";
+export type OrbState = "idle" | "connecting" | "listening" | "thinking" | "speaking" | "staff" | "error";
 
-
-
-
-
-
-
-
-
-
-
-export function VoiceOrb({ state, volume = 0 }: { state: OrbState; volume?: number }) {
+// Grainy gradient sphere. Palette follows the conversation state; size
+// follows the speaker's volume (0..1).
+export function VoiceOrb({ state, volume = 0, small = false }: { state: OrbState; volume?: number; small?: boolean }) {
   return (
-    <div className={`orbWrap orb-${state}`} style={{ "--volume": volume } as CSSProperties}>
-      <div className="orbGlow" />
-      <div className="orbSphere">
-        <div className="orbLayer l1" />
-        <div className="orbLayer l2" />
-        <div className="orbLayer l3" />
-        <div className="orbShine" />
-      </div>
-    </div>
+    <div
+      className={`orb state-${state}${small ? " small" : ""}`}
+      style={{ "--volume": Math.min(1, Math.max(0, volume)) } as CSSProperties}
+      role="img"
+      aria-label={`Voice state: ${state}`}
+    />
   );
 }

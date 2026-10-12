@@ -1,21 +1,30 @@
 import type { Metadata } from "next";
-import localFont from "next/font/local";
-import "@livekit/components-styles";
+import { Geist, Newsreader } from "next/font/google";
+import { AGENT_NAME, CLINIC, PRODUCT_NAME, PRODUCT_TAGLINE } from "@/lib/shared";
 import "./globals.css";
 
-const geistSans = localFont({
-  src: "./fonts/GeistVF.woff",
-  variable: "--font-geist-sans",
+// Light display serif for headlines, paired with Geist (below) for UI and body.
+const serif = Newsreader({
+  subsets: ["latin"],
+  weight: ["300", "400"],
+  style: ["normal", "italic"],
+  variable: "--font-serif",
+  display: "swap",
 });
-const geistMono = localFont({
-  src: "./fonts/GeistMonoVF.woff",
-  variable: "--font-geist-mono",
+
+// Geist for UI and body copy: quieter and more precise than Inter.
+const sans = Geist({
+  subsets: ["latin"],
+  variable: "--font-sans",
+  display: "swap",
 });
 
 export const metadata: Metadata = {
-  title: "Gideon-style Intake Demo",
-  description: "Portfolio demo voice-AI intake orchestrator — synthetic data only, not legal advice.",
+  title: `${PRODUCT_NAME}: ${PRODUCT_TAGLINE}`,
+  description: `${PRODUCT_NAME} answers every patient call with ${AGENT_NAME}, an AI receptionist: booking, rescheduling, insurance checks, refills and live hand-off to staff. Demo for ${CLINIC.name}, a fictional clinic. Synthetic data only.`,
 };
+
+const PALETTE_SCRIPT = `try{var p=new URLSearchParams(location.search).get("palette");if(p)localStorage.setItem("palette",p);p=p||localStorage.getItem("palette");if(p&&p!=="lagoon")document.documentElement.dataset.palette=p}catch(e){}`;
 
 export default function RootLayout({
   children,
@@ -23,8 +32,12 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
-      <body className={`${geistSans.variable} ${geistMono.variable}`}>{children}</body>
+    <html lang="en" className={`${serif.variable} ${sans.variable}`} suppressHydrationWarning>
+      <head>
+        {/* Palette preview: ?palette=dusk (or lagoon) switches and remembers it. */}
+        <script dangerouslySetInnerHTML={{ __html: PALETTE_SCRIPT }} />
+      </head>
+      <body>{children}</body>
     </html>
   );
 }

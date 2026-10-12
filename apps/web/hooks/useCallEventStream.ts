@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import type { CallEventPayload } from "@repo/shared";
+import type { CallEventPayload } from "@/lib/shared";
 import { apiClient } from "@/lib/api-client";
 
 
@@ -34,7 +34,7 @@ export function useCallEventStream(callId: string | null) {
         seenIds.current.add(key);
         setEvents((prev) => [...prev, event]);
       } catch {
-
+        // Ignore malformed frames.
       }
     });
 
