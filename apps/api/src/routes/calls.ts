@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { Router } from "express";
 import { z } from "zod";
-import { createLogger } from "@repo/shared";
+import { CALLER_IDENTITY_PREFIX, createLogger } from "@repo/shared";
 import { CallsQueryService } from "../services/CallsQueryService.js";
 import { EventStreamService } from "../services/EventStreamService.js";
 import { LiveKitTokenService } from "../services/LiveKitTokenService.js";
@@ -17,18 +17,18 @@ const createSessionSchema = z.object({
   callerName: z.string().min(1).max(120).optional(),
 });
 
-
 callsRouter.post("/calls/session", async (req, res, next) => {
   try {
     const body = createSessionSchema.parse(req.body ?? {});
     const roomName = `call-${randomUUID()}`;
-    const identity = `caller-${randomUUID().slice(0, 8)}`;
+    const identity = `${CALLER_IDENTITY_PREFIX}${randomUUID().slice(0, 8)}`;
 
     const call = await queryService.createCall(roomName);
     const session = await tokenService.createSession({
       roomName,
       identity,
-      participantName: body.callerName ?? "Prospective Caller",
+      participantName: body.callerName ?? "Caller",
+      canSetAttributes: true,
     });
 
     logger.event("call.session.created", { callId: call.id, roomName, identity });
@@ -68,7 +68,6 @@ callsRouter.get("/calls/:id/events", async (req, res, next) => {
     next(err);
   }
 });
-
 
 callsRouter.get("/calls/:id/events/stream", async (req, res, next) => {
   try {

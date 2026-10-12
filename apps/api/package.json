@@ -8,7 +8,8 @@
     "build": "tsc -p tsconfig.json",
     "start": "bun dist/server.js",
     "lint": "eslint . --max-warnings 0",
-    "check-types": "tsc --noEmit"
+    "check-types": "tsc --noEmit",
+    "test": "dotenv -e ../../.env -- bun test test/"
   },
   "dependencies": {
     "@repo/db": "*",
@@ -26,6 +27,7 @@
     "@types/express": "^5.0.6",
     "@types/node": "^22.15.3",
     "dotenv-cli": "^11.0.0",
+    "eslint": "^9.39.1",
     "tsx": "^4.23.12",
     "typescript": "5.9.2"
   }

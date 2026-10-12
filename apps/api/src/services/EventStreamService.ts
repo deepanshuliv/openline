@@ -5,11 +5,6 @@ import type { CallsQueryService } from "./CallsQueryService.js";
 
 const logger = createLogger("api:sse");
 
-
-
-
-
-
 export class EventStreamService {
   constructor(private readonly queryService: CallsQueryService) {}
 
@@ -20,8 +15,6 @@ export class EventStreamService {
       Connection: "keep-alive",
       "X-Accel-Buffering": "no",
     });
-
-
 
     const backlog = await this.queryService.getCallEvents(callId);
     for (const event of backlog) {
