@@ -1,195 +1,125 @@
 import { fileURLToPath } from "node:url";
-import { AgentSession, AgentSessionEventTypes, ServerOptions, cli, defineAgent, type JobContext } from "@livekit/agents";
-import * as deepgram from "@livekit/agents-plugin-deepgram";
-import * as openai from "@livekit/agents-plugin-openai";
+import { ServerOptions, cli, defineAgent, voice, type JobContext, type JobProcess, type VAD } from "@livekit/agents";
 import * as silero from "@livekit/agents-plugin-silero";
-import { CallEventType, TurnState, createLogger } from "@repo/shared";
+import { AGENT_READY_ATTRIBUTE, CallEventType, CallPhase, createLogger } from "@repo/shared";
 import { env } from "./env.js";
-import { CallLogService } from "./services/CallLogService.js";
-import { CallOrchestrator } from "./orchestrator/CallOrchestrator.js";
+import { CallLogService } from "./core/CallLogService.js";
+import { CallSession } from "./core/CallSession.js";
+import { WarmTransfer } from "./core/WarmTransfer.js";
+import { PhraseCache } from "./core/PhraseCache.js";
+import { installToolFiller } from "./core/toolFiller.js";
+import { waitForCallerReady } from "./core/callerReady.js";
+import { createVoiceSession } from "./core/voiceSession.js";
+import { checkProviderKeys, createTTS } from "./core/providers.js";
+import { clinicVertical } from "./verticals/clinic/index.js";
 
 const logger = createLogger("agent:entry");
 
-
+const vertical = clinicVertical;
 const GOODBYE_MAX_WAIT_MS = 15_000;
+const GREETING_PREWARM_MAX_MS = 3_000;
+// How long the agent waits, silent, for the caller to press OK before giving up.
+const CALLER_READY_TIMEOUT_MS = 3 * 60_000;
 
 export default defineAgent({
-  prewarm: async () => {
-
-    await silero.VAD.load();
-    logger.info("prewarm.vad_loaded");
+  prewarm: async (proc: JobProcess) => {
+    void checkProviderKeys();
+    const phrases = new PhraseCache(createTTS());
+    // Only the greeting gates readiness, and only briefly: the job process must
+    // finish prewarm within LiveKit's init timeout or the call is never
+    // answered. A slow TTS just means the greeting plays via live TTS.
+    const greeting = phrases.add([vertical.phrases.greeting]);
+    const [vad] = await Promise.all([
+      silero.VAD.load({ minSilenceDuration: env.VAD_MIN_SILENCE_MS }),
+      Promise.race([greeting, new Promise((r) => setTimeout(r, GREETING_PREWARM_MAX_MS))]),
+    ]);
+    void phrases.add([...(vertical.phrases.goodbye ? [vertical.phrases.goodbye] : []), ...vertical.phrases.fillers, ...Object.values(vertical.phrases.toolBridges ?? {}), ...(vertical.phrases.other ?? [])]);
+    proc.userData.vad = vad;
+    proc.userData.phrases = phrases;
+    logger.info("prewarm.ready");
   },
 
   entry: async (ctx: JobContext) => {
     await ctx.connect();
     const roomName = ctx.room.name ?? "unknown-room";
-    logger.info("job.connected", { roomName });
+    const record = await new CallLogService().findOrCreateByRoomName(roomName);
+    const call = new CallSession({ callId: record.id, roomName, agentLabel: vertical.agentLabel });
+    logger.info("job.connected", { roomName, callId: call.callId, vertical: vertical.name });
 
-    const call = await new CallLogService().findOrCreateByRoomName(roomName);
-    const orchestrator = new CallOrchestrator({ callId: call.id, roomName });
-
-    const vad = await silero.VAD.load();
-    const stt = new deepgram.STT({ apiKey: env.DEEPGRAM_API_KEY, model: "nova-3" });
-    const tts = new deepgram.TTS({ apiKey: env.DEEPGRAM_API_KEY, model: "aura-asteria-en" });
-    const llm = new openai.LLM({
-      apiKey: env.OPENROUTER_API_KEY,
-      baseURL: "https://openrouter.ai/api/v1",
-      model: env.OPENROUTER_MODEL,
+    // Bind the pipeline to the caller so staff who join later aren't treated as input.
+    const caller = await ctx.waitForParticipant();
+    // The caller joins while the connect dialog is still open; nothing is said
+    // or heard until they press OK.
+    const callerReadyResult = waitForCallerReady(ctx.room, caller.identity, CALLER_READY_TIMEOUT_MS);
+    const callerReady = new Promise<void>((resolve) => {
+      void callerReadyResult.then((ready) => ready && resolve());
+    });
+    const session = createVoiceSession(call, ctx.proc.userData.vad as VAD, vertical.keyterms);
+    const phrases = ctx.proc.userData.phrases as PhraseCache;
+    installToolFiller(call, session, phrases, { fillers: vertical.phrases.fillers, toolBridges: vertical.phrases.toolBridges, skipTools: vertical.fillerSkipTools });
+    const transfer = new WarmTransfer(call, {
+      room: ctx.room,
+      session,
+      timeoutMs: env.TRANSFER_TIMEOUT_SEC * 1000,
+      scripts: vertical.transferScripts,
     });
 
-    const session = new AgentSession<CallOrchestrator>({
-      vad,
-      stt,
-      tts,
-      llm,
-      userData: orchestrator,
-      turnHandling: {
-
-
-
-
-        interruption: { minWords: 2 },
-      },
-    });
-
-
-
-    session.on(AgentSessionEventTypes.UserInputTranscribed, (ev) => {
-      void orchestrator.eventService.emit(ev.isFinal ? CallEventType.USER_TRANSCRIPT_FINAL : CallEventType.USER_TRANSCRIPT_PARTIAL, {
-        agent: orchestrator.state.activeAgent,
-        phase: orchestrator.state.currentPhase,
-        metadata: { transcript: ev.transcript },
-      });
-    });
-
-    session.on(AgentSessionEventTypes.ConversationItemAdded, (ev) => {
-      const item = ev.item;
-      if (item.type !== "message") return;
-      const text = item.textContent ?? "";
-      if (item.role === "user") {
-        void orchestrator.recordUserTurn(text);
-      } else if (item.role === "assistant") {
-        void orchestrator.recordAgentTurn(text);
-        void orchestrator.eventService.emit(CallEventType.AGENT_SPEECH, {
-          agent: orchestrator.state.activeAgent,
-          phase: orchestrator.state.currentPhase,
-          metadata: { text },
-        });
-      }
-    });
-
-    session.on(AgentSessionEventTypes.AgentStateChanged, (ev) => {
-      if (ev.newState === "thinking") {
-        orchestrator.state.turnState = TurnState.THINKING;
-        void orchestrator.eventService.emit(CallEventType.LLM_STARTED, { agent: orchestrator.state.activeAgent, phase: orchestrator.state.currentPhase });
-      } else if (ev.newState === "speaking") {
-        orchestrator.state.turnState = TurnState.SPEAKING;
-        void orchestrator.eventService.emit(CallEventType.TTS_STARTED, { agent: orchestrator.state.activeAgent, phase: orchestrator.state.currentPhase });
-      } else if (ev.newState === "listening") {
-        orchestrator.state.turnState = TurnState.LISTENING;
-      }
-    });
-
-    session.on(AgentSessionEventTypes.UserStateChanged, (ev) => {
-
-
-      if (ev.newState === "speaking" && session.agentState === "speaking") {
-        orchestrator.state.turnState = TurnState.INTERRUPTED;
-        orchestrator.state.interruptionCount += 1;
-        void orchestrator.eventService.emit(CallEventType.INTERRUPTION_DETECTED, {
-          agent: orchestrator.state.activeAgent,
-          phase: orchestrator.state.currentPhase,
-          metadata: { interruptionCount: orchestrator.state.interruptionCount },
-        });
-      }
-    });
-
-    session.on(AgentSessionEventTypes.AgentFalseInterruption, (ev) => {
-      void orchestrator.eventService.emit(CallEventType.SPEECH_CANCELLED, {
-        agent: orchestrator.state.activeAgent,
-        phase: orchestrator.state.currentPhase,
-        metadata: { falseInterruption: true, resumed: ev.resumed },
-      });
-    });
-
-    session.on(AgentSessionEventTypes.MetricsCollected, (ev) => {
-      const m = ev.metrics;
-      if (m.type === "llm_metrics") {
-        void orchestrator.eventService.emit(CallEventType.LLM_COMPLETED, {
-          agent: orchestrator.state.activeAgent,
-          phase: orchestrator.state.currentPhase,
-          durationMs: Math.round(m.durationMs),
-          metadata: { ttftMs: m.ttftMs, promptTokens: m.promptTokens, completionTokens: m.completionTokens },
-        });
-      } else if (m.type === "tts_metrics") {
-        void orchestrator.eventService.emit(CallEventType.FIRST_AUDIO, {
-          agent: orchestrator.state.activeAgent,
-          phase: orchestrator.state.currentPhase,
-          durationMs: Math.round(m.ttfbMs),
-          metadata: { charactersCount: m.charactersCount },
-        });
-      } else if (m.type === "eou_metrics") {
-        void orchestrator.eventService.emit("latency.end_of_utterance", {
-          agent: orchestrator.state.activeAgent,
-          phase: orchestrator.state.currentPhase,
-          durationMs: Math.round(m.endOfUtteranceDelayMs),
-          metadata: { transcriptionDelayMs: m.transcriptionDelayMs },
-        });
-      }
-    });
-
-    session.on(AgentSessionEventTypes.Error, (ev) => {
-
-
-
-
-      const wrapped = ev.error;
-      const message = wrapped instanceof Error ? wrapped.message : wrapped.error.message;
-      void orchestrator.eventService.emit(CallEventType.ERROR, {
-        agent: orchestrator.state.activeAgent,
-        phase: orchestrator.state.currentPhase,
-        metadata: { message, source: wrapped.type, recoverable: wrapped.recoverable },
-      });
-    });
-
-
-
-    let teardownStarted = false;
-
-    orchestrator.onEnded = () => {
-      if (teardownStarted) return;
-      teardownStarted = true;
+    let leaving = false;
+    call.onEnded = (reason) => {
+      if (leaving) return;
+      leaving = true;
+      // Stop listening: anything said after the call ends (a trailing "bye")
+      // must not start another turn while the goodbye plays.
+      session.input.setAudioEnabled(false);
       void (async () => {
-
-
         const deadline = Date.now() + GOODBYE_MAX_WAIT_MS;
+        // The goodbye is fixed audio played by code, so a call never ends in silence.
+        if (reason === "agent_ended" && vertical.phrases.goodbye) {
+          try {
+            await Promise.race([phrases.say(session, vertical.phrases.goodbye, { allowInterruptions: false }).waitForPlayout(), new Promise((r) => setTimeout(r, GOODBYE_MAX_WAIT_MS))]);
+          } catch (err) {
+            logger.warn("goodbye.failed", { message: String(err) });
+          }
+        }
+        // Let anything still playing (e.g. a transfer introduction) finish.
         while (session.agentState === "speaking" && Date.now() < deadline) {
           await new Promise((resolve) => setTimeout(resolve, 200));
         }
         await session.close();
+        // Leave the room without ending it: after a handoff, caller and staff stay connected.
+        ctx.shutdown(reason);
       })();
     };
 
-    session.on(AgentSessionEventTypes.Close, () => {
-
-
-      teardownStarted = true;
-      void orchestrator.endCall("session_closed");
+    session.on(voice.AgentSessionEventTypes.Close, () => {
+      void call.endCall("session_closed");
     });
-
     ctx.addShutdownCallback(async () => {
-      await orchestrator.endCall("job_shutdown");
+      await call.endCall("job_shutdown");
     });
 
-    await orchestrator.start();
-
+    await call.emit(CallEventType.CALL_STARTED, { roomName, vertical: vertical.name, models: { stt: `assemblyai/${env.ASSEMBLYAI_MODEL}`, llm: `deepseek/${env.DEEPSEEK_MODEL}`, tts: `rime/${env.RIME_MODEL}:${env.RIME_SPEAKER}` } });
     await session.start({
-      agent: orchestrator.buildInitialAgent(),
+      agent: vertical.createAgent({ call, transfer, phrases, callerReady }),
       room: ctx.room,
+      inputOptions: { participantIdentity: caller.identity },
     });
+    session.input.setAudioEnabled(false);
+    await ctx.room.localParticipant?.setAttributes({ [AGENT_READY_ATTRIBUTE]: "true" });
+    await call.emit(CallEventType.AGENT_ENTERED);
+    logger.info("session.started", { callId: call.callId, caller: caller.identity });
 
-    logger.info("session.started", { callId: call.id, roomName });
+    const ready = await callerReadyResult;
+    if (!ready) {
+      logger.info("caller.not_ready", { callId: call.callId });
+      await call.endCall("caller_not_ready", "Caller didn't connect.");
+      return;
+    }
+    session.input.setAudioEnabled(true);
+    call.transitionPhase(CallPhase.IDENTIFYING, "greeting delivered");
+    logger.info("caller.ready", { callId: call.callId });
   },
 });
 
+// No agentName: LiveKit auto-dispatches this worker to every new room.
 cli.runApp(new ServerOptions({ agent: fileURLToPath(import.meta.url) }));

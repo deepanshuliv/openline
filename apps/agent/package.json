@@ -5,17 +5,22 @@
   "type": "module",
   "scripts": {
     "dev": "dotenv -e ../../.env -- tsx watch src/entry.ts dev",
-    "build": "tsc -p tsconfig.json && cp -r src/policy dist/policy",
+    "build": "tsc -p tsconfig.json",
     "start": "bun dist/entry.js start",
     "lint": "eslint . --max-warnings 0",
-    "check-types": "tsc --noEmit"
+    "check-types": "tsc --noEmit",
+    "test": "dotenv -e ../../.env -- bun test --preload ./test/setup.ts test/",
+    "evals": "dotenv -e ../../.env -- bun evals/llm-evals.ts",
+    "smoke": "dotenv -e ../../.env -- bun evals/smoke-providers.ts",
+    "live-call": "dotenv -e ../../.env -- bun evals/live-call.ts"
   },
   "dependencies": {
     "@livekit/agents": "1.6.3",
-    "@livekit/agents-plugin-deepgram": "1.6.3",
+    "@livekit/agents-plugin-assemblyai": "1.6.3",
     "@livekit/agents-plugin-openai": "1.6.3",
+    "@livekit/agents-plugin-rime": "1.6.3",
     "@livekit/agents-plugin-silero": "1.6.3",
-    "@openrouter/sdk": "^1.2.27",
+    "@livekit/rtc-node": "^0.13.33",
     "@repo/db": "*",
     "@repo/shared": "*",
     "ioredis": "^6.0.0",
@@ -26,6 +31,7 @@
     "@repo/typescript-config": "*",
     "@types/node": "^22.15.3",
     "dotenv-cli": "^11.0.0",
+    "eslint": "^9.39.1",
     "tsx": "^4.23.12",
     "typescript": "5.9.2"
   }
