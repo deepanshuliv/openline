@@ -29,3 +29,9 @@ yarn-error.log*
 *.pem
 
 .claude/
+
+# local-only
+demo-video/
+docs/video/
+.agents/
+skills-lock.json
