@@ -2,6 +2,8 @@
 
 *The clinic line that's always open.*
 
+https://github.com/user-attachments/assets/c38ef3ed-dccd-437e-a835-bb86888af2e2
+
 **Openline** is a browser-based voice AI receptionist platform. Its receptionist, **Suzi**, answers for a (fictional) family clinic, **Maple Grove Family Clinic**. One agent handles four kinds of calls: booking, rescheduling or cancelling appointments, insurance and eligibility questions, and prescription refills. When a refill needs a clinician, the agent does a **live warm transfer** to a human on the staff console.
 
 The agent is built as a **vertical-agnostic core** plus a **clinic vertical**. The core owns the voice pipeline, call lifecycle, telemetry, latency tracking and warm transfer. The vertical supplies the persona, tools and business rules.
