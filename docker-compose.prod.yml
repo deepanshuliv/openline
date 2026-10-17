@@ -1,0 +1,196 @@
+# Production stack for the shared GCP VM (see /opt/apps/DEPLOYMENT.md there).
+#   flock /opt/apps/.build.lock docker compose -p openline -f docker-compose.prod.yml up -d --build
+# Only the gateway publishes a port, on 127.0.0.1:8100. Values come from .env.
+name: openline
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+x-db-url: &db-url postgresql://openline:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@postgres:5432/openline
+
+x-livekit-env: &livekit-env
+  LIVEKIT_URL: ${LIVEKIT_URL:?set LIVEKIT_URL in .env}
+  LIVEKIT_API_KEY: ${LIVEKIT_API_KEY:?set LIVEKIT_API_KEY in .env}
+  LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET:?set LIVEKIT_API_SECRET in .env}
+
+# Every app service runs the one image built by `api` (openline-app).
+x-app: &app
+  image: openline-app:latest
+  pull_policy: never
+  restart: unless-stopped
+  logging: *logging
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    logging: *logging
+    mem_limit: 512m
+    environment:
+      POSTGRES_USER: openline
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: openline
+    command: ["postgres", "-c", "shared_buffers=96MB", "-c", "max_connections=50", "-c", "max_wal_size=256MB", "-c", "min_wal_size=64MB"]
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U openline -d openline"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  # Pub/sub only (live call events and the handoff queue); nothing is stored.
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    logging: *logging
+    mem_limit: 96m
+    command: ["redis-server", "--save", "", "--appendonly", "no", "--maxmemory", "48mb", "--maxmemory-policy", "noeviction"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  migrate:
+    <<: *app
+    restart: "no"
+    mem_limit: 384m
+    working_dir: /repo/packages/db
+    command: ["bun", "x", "prisma", "migrate", "deploy"]
+    environment:
+      DATABASE_URL: *db-url
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # Resets the four demo patients' records (dates are relative to now); call history is kept.
+  seed:
+    <<: *app
+    restart: "no"
+    mem_limit: 384m
+    working_dir: /repo/packages/db
+    command: ["bun", "prisma/seed.ts"]
+    environment:
+      DATABASE_URL: *db-url
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  api:
+    <<: *app
+    build:
+      context: .
+      dockerfile: Dockerfile.prod
+      args:
+        NEXT_PUBLIC_API_URL: ""
+      labels:
+        openline.image: app
+    mem_limit: 384m
+    working_dir: /repo/apps/api
+    command: ["bun", "dist/server.js"]
+    environment:
+      <<: *livekit-env
+      API_PORT: "4000"
+      DATABASE_URL: *db-url
+      REDIS_URL: redis://redis:6379
+      CORS_ORIGIN: ${CORS_ORIGIN:?set CORS_ORIGIN in .env}
+    healthcheck:
+      test: ["CMD", "bun", "-e", "fetch('http://127.0.0.1:4000/health').then(r => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+
+  # LiveKit worker: connects out to LiveKit Cloud, no inbound port. The health
+  # server on :8081 is internal to the container.
+  agent:
+    <<: *app
+    mem_limit: 2560m
+    working_dir: /repo/apps/agent
+    command: ["bun", "dist/entry.js", "start"]
+    stop_grace_period: 30s
+    environment:
+      <<: *livekit-env
+      DATABASE_URL: *db-url
+      REDIS_URL: redis://redis:6379
+      ASSEMBLYAI_API_KEY: ${ASSEMBLYAI_API_KEY:?set ASSEMBLYAI_API_KEY in .env}
+      ASSEMBLYAI_MODEL: ${ASSEMBLYAI_MODEL:-universal-streaming-english}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:?set DEEPSEEK_API_KEY in .env}
+      DEEPSEEK_MODEL: ${DEEPSEEK_MODEL:-deepseek-chat}
+      RIME_API_KEY: ${RIME_API_KEY:?set RIME_API_KEY in .env}
+      RIME_MODEL: ${RIME_MODEL:-mistv3}
+      RIME_SPEAKER: ${RIME_SPEAKER:-cove}
+      PROVIDER_FALLBACK: ${PROVIDER_FALLBACK:-on}
+      VAD_MIN_SILENCE_MS: ${VAD_MIN_SILENCE_MS:-250}
+      ENDPOINTING_MIN_DELAY_MS: ${ENDPOINTING_MIN_DELAY_MS:-600}
+      ENDPOINTING_MAX_DELAY_MS: ${ENDPOINTING_MAX_DELAY_MS:-1200}
+      TURN_DETECTOR: ${TURN_DETECTOR:-on}
+      PREEMPTIVE_GENERATION: ${PREEMPTIVE_GENERATION:-on}
+      TRANSFER_TIMEOUT_SEC: ${TRANSFER_TIMEOUT_SEC:-90}
+    healthcheck:
+      test: ["CMD", "bun", "-e", "fetch('http://127.0.0.1:8081/').then(r => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+
+  web:
+    <<: *app
+    mem_limit: 512m
+    working_dir: /repo/apps/web
+    command: ["./node_modules/.bin/next", "start", "-H", "0.0.0.0", "-p", "3000"]
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/').then(r => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  # Daily delete of finished-call history older than CALL_RETENTION_DAYS.
+  retention:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    logging: *logging
+    mem_limit: 64m
+    entrypoint: ["sh", "/retention.sh"]
+    environment:
+      PGHOST: postgres
+      PGUSER: openline
+      PGDATABASE: openline
+      PGPASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      CALL_RETENTION_DAYS: ${CALL_RETENTION_DAYS:-90}
+    volumes:
+      - ./deploy/retention.sh:/retention.sh:ro
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  gateway:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    logging: *logging
+    mem_limit: 64m
+    ports:
+      - "127.0.0.1:8100:80"
+    volumes:
+      - ./deploy/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - api
+      - web
+
+volumes:
+  postgres-data:
