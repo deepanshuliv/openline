@@ -1,12 +1,15 @@
 #!/bin/sh
 # Keeps Postgres bounded: once a day, deletes finished calls (with their events,
 # transcript turns and handoffs) older than CALL_RETENTION_DAYS, plus old
-# cancelled/completed appointments and refill requests. Runs in postgres:16-alpine.
+# cancelled/completed appointments and refill requests. Runs in postgres:16-alpine
+# against DATABASE_URL (Neon).
 set -u
 DAYS="${CALL_RETENTION_DAYS:-90}"
+# libpq rejects Prisma-only query parameters; drop them.
+DB_URL=$(printf '%s' "$DATABASE_URL" | sed -E 's/([?&])(schema|pgbouncer|connection_limit|pool_timeout|socket_timeout|statement_cache_size)=[^&]*/\1/g; s/&&+/\&/g; s/\?&/?/; s/[?&]$//')
 
 prune() {
-  psql -v ON_ERROR_STOP=1 -v days="$DAYS" -q <<'SQL'
+  psql "$DB_URL" -v ON_ERROR_STOP=1 -v days="$DAYS" -q <<'SQL'
 BEGIN;
 CREATE TEMP TABLE old_calls ON COMMIT DROP AS
   SELECT id FROM "Call"

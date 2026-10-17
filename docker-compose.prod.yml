@@ -9,7 +9,9 @@ x-logging: &logging
     max-size: "10m"
     max-file: "3"
 
-x-db-url: &db-url postgresql://openline:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@postgres:5432/openline
+# Neon Postgres, outside the VM. Use the direct (non -pooler) URL with
+# ?sslmode=require and no channel_binding (DEPLOYMENT.md section 6, item 5).
+x-db-url: &db-url ${DATABASE_URL:?set DATABASE_URL (Neon direct URL) in .env}
 
 x-livekit-env: &livekit-env
   LIVEKIT_URL: ${LIVEKIT_URL:?set LIVEKIT_URL in .env}
@@ -24,24 +26,6 @@ x-app: &app
   logging: *logging
 
 services:
-  postgres:
-    image: postgres:16-alpine
-    restart: unless-stopped
-    logging: *logging
-    mem_limit: 512m
-    environment:
-      POSTGRES_USER: openline
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
-      POSTGRES_DB: openline
-    command: ["postgres", "-c", "shared_buffers=96MB", "-c", "max_connections=50", "-c", "max_wal_size=256MB", "-c", "min_wal_size=64MB"]
-    volumes:
-      - postgres-data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U openline -d openline"]
-      interval: 5s
-      timeout: 5s
-      retries: 20
-
   # Pub/sub only (live call events and the handoff queue); nothing is stored.
   redis:
     image: redis:7-alpine
@@ -63,9 +47,6 @@ services:
     command: ["bun", "x", "prisma", "migrate", "deploy"]
     environment:
       DATABASE_URL: *db-url
-    depends_on:
-      postgres:
-        condition: service_healthy
 
   # Resets the four demo patients' records (dates are relative to now); call history is kept.
   seed:
@@ -160,7 +141,8 @@ services:
       retries: 5
       start_period: 20s
 
-  # Daily delete of finished-call history older than CALL_RETENTION_DAYS.
+  # Daily delete of finished-call history older than CALL_RETENTION_DAYS, so the
+  # Neon database stays bounded. Only psql is used from this image.
   retention:
     image: postgres:16-alpine
     restart: unless-stopped
@@ -168,10 +150,7 @@ services:
     mem_limit: 64m
     entrypoint: ["sh", "/retention.sh"]
     environment:
-      PGHOST: postgres
-      PGUSER: openline
-      PGDATABASE: openline
-      PGPASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      DATABASE_URL: *db-url
       CALL_RETENTION_DAYS: ${CALL_RETENTION_DAYS:-90}
     volumes:
       - ./deploy/retention.sh:/retention.sh:ro
@@ -191,6 +170,3 @@ services:
     depends_on:
       - api
       - web
-
-volumes:
-  postgres-data:
