@@ -400,6 +400,51 @@ button {
   margin-left: 8px;
 }
 
+/* Clerk's avatar menu, last in the nav (see lib/clerkAppearance.ts). */
+.navUser {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 8px;
+  min-width: 36px;
+  min-height: 36px;
+}
+
+/* ---------------------------------------------------------------- sign-in */
+
+/* Like .home: headline and the Clerk card, the ribbon filling what is left. */
+.signInPage {
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+}
+
+.signInMain {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: clamp(16px, 5vh, 64px) 0 0;
+}
+
+.signInInner {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: clamp(12px, 2vh, 16px);
+  text-align: center;
+}
+
+.signInInner .lede {
+  color: var(--ink-muted);
+  margin-bottom: 8px;
+}
+
+.signInPage .ribbon {
+  margin-top: -48px;
+}
+
 /* ------------------------------------------------------------------ hero */
 
 /* Home is exactly one viewport: nav, hero copy, then the ribbon fills the rest. */

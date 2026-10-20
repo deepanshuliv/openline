@@ -35,3 +35,6 @@ demo-video/
 docs/video/
 .agents/
 skills-lock.json
+
+# Clerk keyless-mode dev keys (written by @clerk/nextjs when no keys are set)
+.clerk/

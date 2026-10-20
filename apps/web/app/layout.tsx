@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { Geist, Newsreader } from "next/font/google";
+import { ClerkProvider } from "@clerk/nextjs";
 import { AGENT_NAME, CLINIC, PRODUCT_NAME, PRODUCT_TAGLINE } from "@/lib/shared";
+import { clerkAppearance } from "@/lib/clerkAppearance";
 import "./globals.css";
 
 // Light display serif for headlines, paired with Geist (below) for UI and body.
@@ -37,7 +39,11 @@ export default function RootLayout({
         {/* Palette preview: ?palette=dusk (or lagoon) switches and remembers it. */}
         <script dangerouslySetInnerHTML={{ __html: PALETTE_SCRIPT }} />
       </head>
-      <body>{children}</body>
+      <body>
+        <ClerkProvider appearance={clerkAppearance} signInUrl="/sign-in" signInFallbackRedirectUrl="/" afterSignOutUrl="/sign-in">
+          {children}
+        </ClerkProvider>
+      </body>
     </html>
   );
 }

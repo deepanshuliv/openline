@@ -13,6 +13,11 @@ x-logging: &logging
 # ?sslmode=require and no channel_binding (DEPLOYMENT.md section 6, item 5).
 x-db-url: &db-url ${DATABASE_URL:?set DATABASE_URL (Neon direct URL) in .env}
 
+# Clerk: web sends signed-out visitors to /sign-in, api rejects them with 401.
+x-clerk-env: &clerk-env
+  NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY:?set NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY in .env}
+  CLERK_SECRET_KEY: ${CLERK_SECRET_KEY:?set CLERK_SECRET_KEY in .env}
+
 x-livekit-env: &livekit-env
   LIVEKIT_URL: ${LIVEKIT_URL:?set LIVEKIT_URL in .env}
   LIVEKIT_API_KEY: ${LIVEKIT_API_KEY:?set LIVEKIT_API_KEY in .env}
@@ -68,13 +73,14 @@ services:
       dockerfile: Dockerfile.prod
       args:
         NEXT_PUBLIC_API_URL: ""
+        NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY:?set NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY in .env}
       labels:
         openline.image: app
     mem_limit: 384m
     working_dir: /repo/apps/api
     command: ["bun", "dist/server.js"]
     environment:
-      <<: *livekit-env
+      <<: [*livekit-env, *clerk-env]
       API_PORT: "4000"
       DATABASE_URL: *db-url
       REDIS_URL: redis://redis:6379
@@ -104,7 +110,7 @@ services:
       DATABASE_URL: *db-url
       REDIS_URL: redis://redis:6379
       ASSEMBLYAI_API_KEY: ${ASSEMBLYAI_API_KEY:?set ASSEMBLYAI_API_KEY in .env}
-      ASSEMBLYAI_MODEL: ${ASSEMBLYAI_MODEL:-universal-streaming-english}
+      ASSEMBLYAI_MODEL: ${ASSEMBLYAI_MODEL:-u3-rt-pro}
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:?set DEEPSEEK_API_KEY in .env}
       DEEPSEEK_MODEL: ${DEEPSEEK_MODEL:-deepseek-chat}
       RIME_API_KEY: ${RIME_API_KEY:?set RIME_API_KEY in .env}
@@ -117,6 +123,7 @@ services:
       TURN_DETECTOR: ${TURN_DETECTOR:-on}
       PREEMPTIVE_GENERATION: ${PREEMPTIVE_GENERATION:-on}
       TRANSFER_TIMEOUT_SEC: ${TRANSFER_TIMEOUT_SEC:-90}
+      MAX_CALL_SEC: ${MAX_CALL_SEC:-60}
     healthcheck:
       test: ["CMD", "bun", "-e", "fetch('http://127.0.0.1:8081/').then(r => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
       interval: 30s
@@ -134,6 +141,8 @@ services:
     mem_limit: 512m
     working_dir: /repo/apps/web
     command: ["./node_modules/.bin/next", "start", "-H", "0.0.0.0", "-p", "3000"]
+    environment:
+      <<: *clerk-env
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/').then(r => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
       interval: 30s

@@ -35,7 +35,7 @@ export function useHandoffQueue() {
     };
 
     try {
-      source = new EventSource(apiClient.handoffStreamUrl());
+      source = new EventSource(apiClient.handoffStreamUrl(), { withCredentials: true });
       source.onopen = () => {
         setMode("live");
         setError(null);

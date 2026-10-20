@@ -9,9 +9,10 @@
     "start": "bun dist/server.js",
     "lint": "eslint . --max-warnings 0",
     "check-types": "tsc --noEmit",
-    "test": "dotenv -e ../../.env -- bun test test/"
+    "test": "dotenv -e ../../.env -- bun test --preload ./test/setup.ts test/"
   },
   "dependencies": {
+    "@clerk/express": "2.1.80",
     "@repo/db": "*",
     "@repo/shared": "*",
     "cors": "^2.8.6",

@@ -12,6 +12,7 @@
     "test": "bun test test/"
   },
   "dependencies": {
+    "@clerk/nextjs": "7.9.17",
     "@livekit/components-react": "^2.9.24",
     "@phosphor-icons/react": "^2.1.10",
     "@repo/shared": "*",

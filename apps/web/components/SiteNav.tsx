@@ -3,6 +3,7 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { UserButton } from "@clerk/nextjs";
 import { Phone, Waveform } from "@phosphor-icons/react";
 import { AGENT_NAME, PRODUCT_NAME } from "@/lib/shared";
 
@@ -44,6 +45,9 @@ export function SiteNav({ action }: { action?: ReactNode }) {
                 Call {AGENT_NAME}
               </Link>
             )}
+          </span>
+          <span className="navUser">
+            <UserButton />
           </span>
         </div>
       </nav>

@@ -22,7 +22,8 @@ export function useCallEventStream(callId: string | null) {
     setEvents([]);
     seenIds.current = new Set();
 
-    const source = new EventSource(apiClient.eventStreamUrl(callId));
+    // withCredentials: EventSource cannot set headers, so the Clerk session cookie authenticates the stream.
+    const source = new EventSource(apiClient.eventStreamUrl(callId), { withCredentials: true });
 
     source.onopen = () => setConnected(true);
     source.onerror = () => setConnected(false);

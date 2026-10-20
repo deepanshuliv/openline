@@ -1,3 +1,4 @@
+import { getToken } from "@clerk/nextjs";
 import type { CallEventPayload, LatencyStats } from "@/lib/shared";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
@@ -22,14 +23,23 @@ export interface Provider {
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  // Every /api route needs the signed-in user's Clerk session.
+  const token = await getToken().catch(() => null);
   let res: Response;
   try {
     res = await fetch(`${API_URL}${path}`, {
       ...init,
-      headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...(init?.headers ?? {}),
+      },
     });
   } catch {
     throw new ApiError(`Can't reach the API at ${API_URL}. Is it running?`, 0);
+  }
+  if (res.status === 401) {
+    throw new ApiError("Your session has ended. Refresh the page to sign in again.", 401);
   }
   if (!res.ok) {
     const body = await res.text().catch(() => "");
