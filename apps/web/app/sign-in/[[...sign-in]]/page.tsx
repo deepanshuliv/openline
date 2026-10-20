@@ -19,7 +19,7 @@ export default function SignInPage() {
         <div className="container signInInner">
           <span className="eyebrow">Sign in to continue</span>
           <h1 className="h1">Talk to {AGENT_NAME}</h1>
-          <p className="lede">Sign in with Google to start a one-minute demo call with {AGENT_NAME}, our AI receptionist.</p>
+          <p className="lede">Sign in to start a one-minute demo call with {AGENT_NAME}, our AI receptionist.</p>
           <SignIn routing="path" path="/sign-in" withSignUp />
         </div>
         <Ribbon />
