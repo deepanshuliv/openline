@@ -9,7 +9,9 @@ const schema = z.object({
   LIVEKIT_API_SECRET: z.string().min(1, "LIVEKIT_API_SECRET is required"),
   // Voice pipeline providers.
   ASSEMBLYAI_API_KEY: z.string().min(1, "ASSEMBLYAI_API_KEY is required"),
-  ASSEMBLYAI_MODEL: z.string().default("universal-streaming-english"),
+  // u3-rt-pro (Universal-3 Pro) is far better than universal-streaming-english
+  // on names, spelled letters, dates and non-US accents.
+  ASSEMBLYAI_MODEL: z.string().default("u3-rt-pro"),
   DEEPSEEK_API_KEY: z.string().min(1, "DEEPSEEK_API_KEY is required"),
   DEEPSEEK_MODEL: z.string().default("deepseek-chat"),
   RIME_API_KEY: z.string().min(1, "RIME_API_KEY is required"),
@@ -39,6 +41,9 @@ const schema = z.object({
   // Start generating a reply from the interim transcript before the turn ends.
   PREEMPTIVE_GENERATION: z.enum(["on", "off"]).default("on"),
   TRANSFER_TIMEOUT_SEC: z.coerce.number().int().positive().default(90),
+  // Demo cap: the agent wraps up and leaves this many seconds after the caller
+  // presses OK. 0 disables it.
+  MAX_CALL_SEC: z.coerce.number().int().min(0).default(60),
 });
 
 export const env = loadEnv(schema);

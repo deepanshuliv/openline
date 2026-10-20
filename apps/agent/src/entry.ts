@@ -20,6 +20,7 @@ const GOODBYE_MAX_WAIT_MS = 15_000;
 const GREETING_PREWARM_MAX_MS = 3_000;
 // How long the agent waits, silent, for the caller to press OK before giving up.
 const CALLER_READY_TIMEOUT_MS = 3 * 60_000;
+const TIME_LIMIT_REASON = "time_limit";
 
 export default defineAgent({
   prewarm: async (proc: JobProcess) => {
@@ -33,7 +34,7 @@ export default defineAgent({
       silero.VAD.load({ minSilenceDuration: env.VAD_MIN_SILENCE_MS }),
       Promise.race([greeting, new Promise((r) => setTimeout(r, GREETING_PREWARM_MAX_MS))]),
     ]);
-    void phrases.add([...(vertical.phrases.goodbye ? [vertical.phrases.goodbye] : []), ...vertical.phrases.fillers, ...Object.values(vertical.phrases.toolBridges ?? {}), ...(vertical.phrases.other ?? [])]);
+    void phrases.add([...(vertical.phrases.goodbye ? [vertical.phrases.goodbye] : []), ...(vertical.phrases.timeUp ? [vertical.phrases.timeUp] : []), ...vertical.phrases.fillers, ...Object.values(vertical.phrases.toolBridges ?? {}), ...(vertical.phrases.other ?? [])]);
     proc.userData.vad = vad;
     proc.userData.phrases = phrases;
     logger.info("prewarm.ready");
@@ -74,9 +75,18 @@ export default defineAgent({
       void (async () => {
         const deadline = Date.now() + GOODBYE_MAX_WAIT_MS;
         // The goodbye is fixed audio played by code, so a call never ends in silence.
-        if (reason === "agent_ended" && vertical.phrases.goodbye) {
+        const closing = reason === "agent_ended" ? vertical.phrases.goodbye : reason === TIME_LIMIT_REASON ? vertical.phrases.timeUp : undefined;
+        if (reason === TIME_LIMIT_REASON) {
+          // Cut off whatever Suzi was saying; the time-up line replaces it.
           try {
-            await Promise.race([phrases.say(session, vertical.phrases.goodbye, { allowInterruptions: false }).waitForPlayout(), new Promise((r) => setTimeout(r, GOODBYE_MAX_WAIT_MS))]);
+            await session.interrupt({ force: true }).await;
+          } catch {
+            // Nothing was playing, or the session is already closing.
+          }
+        }
+        if (closing) {
+          try {
+            await Promise.race([phrases.say(session, closing, { allowInterruptions: false }).waitForPlayout(), new Promise((r) => setTimeout(r, GOODBYE_MAX_WAIT_MS))]);
           } catch (err) {
             logger.warn("goodbye.failed", { message: String(err) });
           }
@@ -116,6 +126,10 @@ export default defineAgent({
       return;
     }
     session.input.setAudioEnabled(true);
+    if (env.MAX_CALL_SEC > 0) {
+      const limit = setTimeout(() => void call.endCall(TIME_LIMIT_REASON, "This one-minute demo call has ended."), env.MAX_CALL_SEC * 1000);
+      ctx.addShutdownCallback(async () => clearTimeout(limit));
+    }
     call.transitionPhase(CallPhase.IDENTIFYING, "greeting delivered");
     logger.info("caller.ready", { callId: call.callId });
   },

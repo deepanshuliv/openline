@@ -61,10 +61,25 @@ export function createClinicTools(call: CallSession, transfer: WarmTransfer) {
   const slots = new HandleMap<Slot>("S");
   const appointments = new HandleMap<{ id: string; startsAt: Date; providerName: string; visitType: string }>("A");
   let verifyAttempts = 0;
+  // Details of a caller with no record. They become a patient only when they
+  // book, so a caller who then says "I already have a booking" (and spells their
+  // name to be found) leaves no stray record behind.
+  let newPatient: { firstName: string; lastName: string; dateOfBirth: string } | null = null;
+  let notFoundCount = 0;
 
   const requirePatient = (): string => {
     if (!call.patientId) throw new ToolUserError("The caller is not verified yet. Ask for their full name and date of birth, then call verify_patient.");
     return call.patientId;
+  };
+
+  // The patient a booking is for: registers a pending new patient on first use.
+  const bookingPatient = async (): Promise<string> => {
+    if (!newPatient) return requirePatient();
+    const created = await patients.register(newPatient);
+    if (!created) throw new ToolUserError("The caller's details aren't usable. Ask once for their full first and last name and birth date, then call verify_patient.");
+    await call.attachPatient(created.id, `${created.firstName} ${created.lastName}`);
+    newPatient = null;
+    return created.id;
   };
 
   const serving = () => {
@@ -74,7 +89,8 @@ export function createClinicTools(call: CallSession, transfer: WarmTransfer) {
   return [
     instrumentedTool(call, {
       name: "verify_patient",
-      description: "Verify the caller's identity by full name and date of birth. Required before discussing or changing any appointment, insurance, or prescription.",
+      description:
+        "Look up the caller by full name and date of birth. Required before booking or before discussing or changing any appointment, insurance, or prescription. With no record on file, the caller can still book as a new patient.",
       parameters: z.object({
         first_name: z.string().min(1),
         last_name: z.string().min(1),
@@ -82,14 +98,38 @@ export function createClinicTools(call: CallSession, transfer: WarmTransfer) {
       }),
       execute: async ({ first_name, last_name, date_of_birth }) => {
         if (verifyAttempts >= MAX_VERIFY_ATTEMPTS) {
-          return { verified: false, message: "Too many attempts. Offer to transfer the caller to the front desk." };
+          return {
+            verified: false,
+            message: newPatient
+              ? "Too many lookups. Don't ask for their details again; book a new patient visit."
+              : "Too many attempts. Offer to transfer the caller to the front desk.",
+          };
         }
         verifyAttempts += 1;
         call.transitionPhase(CallPhase.IDENTIFYING, "verifying caller");
-        const patient = await patients.verify({ firstName: first_name, lastName: last_name, dateOfBirth: date_of_birth });
+        const input = { firstName: first_name, lastName: last_name, dateOfBirth: date_of_birth };
+        const patient = await patients.verify(input);
         if (!patient) {
-          return { verified: false, message: "No match. Read back the name and birth date you heard and ask the caller to confirm or correct them." };
+          if (!patients.canRegister(input)) {
+            return { verified: false, message: "That name or birth date isn't usable. Ask once for their full first and last name and birth date." };
+          }
+          // No record (or the transcript garbled the name): don't loop on
+          // read-backs. They book as a new patient unless they say they already
+          // have a booking, in which case one spelled retry is allowed.
+          newPatient = input;
+          notFoundCount += 1;
+          call.transitionPhase(CallPhase.SERVING, "no record, new patient");
+          appointments.reset([]);
+          return {
+            verified: false,
+            new_patient: true,
+            message:
+              notFoundCount === 1
+                ? "No entry found. Say: \"There's no entry under that name, so I'll create a new one for you with your new appointment.\" Then book a NEW_PATIENT visit. If the caller says they already have a booking or appointment, ask them once to spell their first and last name, join the letters, and call verify_patient again with the spelled name and the same birth date."
+                : "Still no entry. Say in one short sentence you couldn't find a booking under that name either, so you'll book a new appointment. Don't ask for their details again; book a NEW_PATIENT visit.",
+          };
         }
+        newPatient = null;
         await call.attachPatient(patient.id, `${patient.firstName} ${patient.lastName}`);
         call.transitionPhase(CallPhase.SERVING, "caller verified");
         // Include upcoming visits and medications so the next turn needs no extra lookup.
@@ -107,6 +147,10 @@ export function createClinicTools(call: CallSession, transfer: WarmTransfer) {
             visit: VISIT_TYPE_INFO[a.visitType as VisitType]?.label ?? a.visitType,
           })),
           medications: meds.map((m) => `${m.drugName} ${m.strength}`),
+          next_step:
+            upcoming.length > 0
+              ? "Only if the caller explicitly said they already have an appointment, help with the matching one from upcoming_appointments. Otherwise book a new visit."
+              : "No upcoming appointments on file. If they mentioned one, say in one short sentence you couldn't find it. Book a new visit.",
         };
       },
     }),
@@ -148,12 +192,14 @@ export function createClinicTools(call: CallSession, transfer: WarmTransfer) {
 
     instrumentedTool(call, {
       name: "book_appointment",
-      description: "Book one of the slots returned by find_appointment_slots after the caller picks it.",
+      description: "Book one of the slots returned by find_appointment_slots after the caller picks it. Also books for a new caller after verify_patient found no entry.",
       parameters: z.object({ slot_id: z.string(), reason: z.string().describe("Short reason for the visit in the caller's words") }),
       execute: async ({ slot_id, reason }) => {
-        const patientId = requirePatient();
+        if (!newPatient) requirePatient();
         const slot = slots.get(slot_id);
         if (!slot) throw new ToolUserError("Unknown slot. Call find_appointment_slots again and offer fresh times.");
+        // Registers a caller with no entry only now, once the booking is real.
+        const patientId = await bookingPatient();
         try {
           const appt = await scheduling.book({ patientId, slot, reason, callId: call.callId });
           const spoken = formatClinicTime(appt.startsAt);

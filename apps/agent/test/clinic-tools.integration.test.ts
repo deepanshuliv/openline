@@ -56,12 +56,48 @@ describe("verify_patient", () => {
     expect(r.verified).toBe(true);
   });
 
-  test("wrong DOB fails without leaking data", async () => {
+  test("wrong DOB fails without leaking data or creating a patient", async () => {
     const h = await createToolHarness(fx);
     const r = await h.run("verify_patient", { first_name: "Maria", last_name: fx.patients.maria.lastName, date_of_birth: "1985-03-15" });
     expect(r.verified).toBe(false);
+    expect(r.new_patient).toBe(true);
     expect(JSON.stringify(r)).not.toContain("Aetna");
     expect(h.call.patientId).toBeNull();
+  });
+
+  test("an unknown caller becomes a patient only when they book", async () => {
+    const h = await createToolHarness(fx);
+    const lastName = fx.lastName("Newcomer");
+    const countNew = () => prisma.patient.count({ where: { lastName: { equals: lastName, mode: "insensitive" } } });
+    const r = await h.run("verify_patient", { first_name: "zed", last_name: lastName, date_of_birth: "1990-06-01" });
+    expect(r.new_patient).toBe(true);
+    expect(String(r.message)).toContain("no entry");
+    expect(await countNew()).toBe(0);
+    const found = await h.run("find_appointment_slots", { visit_type: "NEW_PATIENT", earliest_date: nextWeekday(2, 7) });
+    const slots = found.slots as { slot_id: string }[];
+    expect(slots.length).toBeGreaterThan(0);
+    const booked = await h.run("book_appointment", { slot_id: slots[0]!.slot_id, reason: "new patient" });
+    expect(booked.booked).toBe(true);
+    expect(await countNew()).toBe(1);
+    fx.track(h.call.patientId!);
+  });
+
+  test("'I already have a booking': a spelled retry finds the patient and nothing new is created", async () => {
+    const h = await createToolHarness(fx);
+    const misheard = await h.run("verify_patient", { first_name: "Maria", last_name: "Gonzales", date_of_birth: fx.patients.maria.dob });
+    expect(misheard.new_patient).toBe(true);
+    const spelled = await verify(h, fx.patients.maria);
+    expect(spelled.verified).toBe(true);
+    expect(h.call.patientId).toBe(fx.patients.maria.id);
+    expect(await prisma.patient.count({ where: { lastName: "Gonzales", dateOfBirth: new Date(fx.patients.maria.dob) } })).toBe(0);
+  });
+
+  test("a second miss stops asking and books as new", async () => {
+    const h = await createToolHarness(fx);
+    await h.run("verify_patient", { first_name: "Zed", last_name: fx.lastName("Nobody"), date_of_birth: "1990-06-01" });
+    const r = await h.run("verify_patient", { first_name: "Zed", last_name: fx.lastName("Nobodie"), date_of_birth: "1990-06-01" });
+    expect(r.new_patient).toBe(true);
+    expect(String(r.message)).toContain("couldn't find");
   });
 
   test("impossible calendar date is rejected, not rolled over", async () => {
@@ -81,7 +117,7 @@ describe("verify_patient", () => {
     for (let i = 0; i < 3; i++) await h.run("verify_patient", { first_name: "Maria", last_name: fx.patients.maria.lastName, date_of_birth: "1900-01-01" });
     const r = await verify(h, fx.patients.maria);
     expect(r.verified).toBe(false);
-    expect(String(r.message)).toContain("transfer");
+    expect(h.call.patientId).toBeNull();
   });
 
   test("re-verifying as a different person replaces the verified patient", async () => {

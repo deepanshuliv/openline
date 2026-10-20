@@ -17,6 +17,8 @@ export interface Fixture {
   patients: Record<"maria" | "robert" | "priya" | "noplan" | "blocker", { id: string; firstName: string; lastName: string; dob: string }>;
   // A new patient with no appointments, for tests that must not share state.
   freshPatient: (firstName: string) => Promise<{ id: string; firstName: string; lastName: string; dob: string }>;
+  // Removes a patient created by the code under test (new-patient registration) on cleanup.
+  track: (patientId: string) => void;
   cleanup: () => Promise<void>;
 }
 
@@ -86,7 +88,8 @@ export async function createFixture(naming: "tagged" | "natural" = "tagged"): Pr
   };
   const cleanup = () => removePatients([maria.id, robert.id, priya.id, noplan.id, blocker.id, ...extra], tag);
 
-  return { tag, lastName, patients: { maria, robert, priya, noplan, blocker }, freshPatient, cleanup };
+  const track = (patientId: string) => void extra.push(patientId);
+  return { tag, lastName, patients: { maria, robert, priya, noplan, blocker }, freshPatient, track, cleanup };
 }
 
 async function removePatients(patientIds: string[], roomPrefix: string): Promise<void> {

@@ -1,14 +1,14 @@
 import { voice } from "@livekit/agents";
 import type { CallSession } from "../../core/CallSession.js";
 import type { Vertical } from "../../core/Vertical.js";
-import { CLINIC_KEYTERMS, FILLERS, GOODBYE, GREETING, TOOL_BRIDGES, buildInstructions, transferIntroduction, transferTimedOut } from "./instructions.js";
+import { CLINIC_KEYTERMS, FILLERS, GOODBYE, GREETING, TIME_UP, TOOL_BRIDGES, buildInstructions, transferIntroduction, transferTimedOut } from "./instructions.js";
 import { createClinicTools } from "./tools.js";
 
 export const clinicVertical: Vertical = {
   name: "clinic",
   agentLabel: "RECEPTIONIST",
   keyterms: CLINIC_KEYTERMS,
-  phrases: { greeting: GREETING, fillers: FILLERS, toolBridges: TOOL_BRIDGES, goodbye: GOODBYE },
+  phrases: { greeting: GREETING, fillers: FILLERS, toolBridges: TOOL_BRIDGES, goodbye: GOODBYE, timeUp: TIME_UP },
   fillerSkipTools: ["transfer_to_staff", "end_call"],
   transferScripts: {
     introduction: (staffName, req, callerName) => transferIntroduction(staffName, req.summary, req.departmentLabel, callerName),

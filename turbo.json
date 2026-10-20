@@ -34,6 +34,11 @@
       "dependsOn": [
         "^test"
       ],
+      "env": [
+        "DATABASE_URL",
+        "TEST_DATABASE_URL",
+        "ALLOW_REMOTE_TEST_DB"
+      ],
       "cache": false
     }
   }

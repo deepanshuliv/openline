@@ -24,7 +24,31 @@ export class PatientDirectory {
       }) ?? null
     );
   }
+
+  // Whether a caller with no record can be registered from these details.
+  canRegister(input: { firstName: string; lastName: string; dateOfBirth: string }): boolean {
+    const dob = parseIsoDate(input.dateOfBirth);
+    return !!dob && dob <= new Date() && normalize(input.firstName).length >= 2 && !!normalize(input.lastName);
+  }
+
+  // A caller with no record on file becomes a new patient when they book.
+  // Returns null when the name or birth date isn't usable.
+  async register(input: { firstName: string; lastName: string; dateOfBirth: string }) {
+    const dob = parseIsoDate(input.dateOfBirth);
+    if (!dob || !this.canRegister(input)) return null;
+    return prisma.patient.create({
+      data: { firstName: titleCase(input.firstName), lastName: titleCase(input.lastName), dateOfBirth: dob },
+      include: { primaryProvider: true },
+    });
+  }
 }
+
+const titleCase = (s: string) =>
+  s
+    .trim()
+    .replace(/\s+/g, " ")
+    .toLowerCase()
+    .replace(/(^|[\s'-])\p{L}/gu, (c) => c.toUpperCase());
 
 // Strict YYYY-MM-DD: rejects dates that don't exist (1985-02-30 would
 // otherwise roll over to March 2).

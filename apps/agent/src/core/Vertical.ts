@@ -15,8 +15,9 @@ export interface Vertical {
   // Fixed phrases pre-synthesized at worker start (greeting, fillers, ...).
   // `goodbye` is played by code when the agent ends the call. `toolBridges`
   // are short lines played while a given tool runs ("Let me check your
-  // coverage."); tools without one fall back to a generic filler.
-  phrases: { greeting: string; fillers: string[]; toolBridges?: Record<string, string>; goodbye?: string; other?: string[] };
+  // coverage."); tools without one fall back to a generic filler. `timeUp` is
+  // played instead of `goodbye` when the call hits MAX_CALL_SEC.
+  phrases: { greeting: string; fillers: string[]; toolBridges?: Record<string, string>; goodbye?: string; timeUp?: string; other?: string[] };
   // Tools that speak for themselves and must not trigger a filler.
   fillerSkipTools: string[];
   // `callerReady` resolves once the caller has pressed OK in the browser; the
