@@ -136,4 +136,13 @@ export default defineAgent({
 });
 
 // No agentName: LiveKit auto-dispatches this worker to every new room.
-cli.runApp(new ServerOptions({ agent: fileURLToPath(import.meta.url) }));
+// In dev, keep one job process prewarmed (LiveKit's dev default is none) and give
+// a cold one longer than the 10s default: under tsx, importing the agent alone
+// takes ~8s, so calls were dropped before Suzi joined. Production keeps its defaults.
+const isDev = process.argv.includes("dev");
+cli.runApp(
+  new ServerOptions({
+    agent: fileURLToPath(import.meta.url),
+    ...(isDev && { numIdleProcesses: 1, initializeProcessTimeout: 30_000 }),
+  }),
+);

@@ -22,8 +22,8 @@ const SCRIPT: Step[] = [
   { kind: "receipt", title: "Booked", detail: "Annual physical · Mon 9:00 AM · Dr. Anita Patel" },
 ];
 
-const STEP_MS = 1500;
-const HOLD_MS = 3500;
+const STEP_MS = 1100;
+const HOLD_MS = 3000;
 
 export function CallPreview() {
   const ref = useRef<HTMLDivElement>(null);

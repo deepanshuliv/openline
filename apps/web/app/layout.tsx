@@ -40,7 +40,7 @@ export default function RootLayout({
         <script dangerouslySetInnerHTML={{ __html: PALETTE_SCRIPT }} />
       </head>
       <body>
-        <ClerkProvider appearance={clerkAppearance} signInUrl="/sign-in" signInFallbackRedirectUrl="/" afterSignOutUrl="/sign-in">
+        <ClerkProvider appearance={clerkAppearance} signInUrl="/sign-in" signInFallbackRedirectUrl="/" afterSignOutUrl="/">
           {children}
         </ClerkProvider>
       </body>

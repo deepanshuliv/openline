@@ -856,27 +856,21 @@ button {
   --size: 140px;
 }
 
+/* Every Suzi state uses the brand gradient; only the human hand-off (staff)
+   changes colour. Problems are spelled out in text, not with a red orb. */
 .orb.state-idle,
-.orb.state-listening {
+.orb.state-listening,
+.orb.state-connecting,
+.orb.state-thinking,
+.orb.state-error {
   --g1: var(--sky-1);
   --g2: var(--sky-2);
   --g3: var(--sky-3);
 }
 
-.orb.state-idle {
+.orb.state-idle,
+.orb.state-error {
   filter: saturate(0.55);
-}
-
-.orb.state-connecting {
-  --g1: #c9c4b8;
-  --g2: var(--sky-2);
-  --g3: #f6f3ec;
-}
-
-.orb.state-thinking {
-  --g1: var(--coral-2);
-  --g2: var(--sky-2);
-  --g3: #f6f2ec;
 }
 
 .orb.state-speaking {
@@ -890,12 +884,6 @@ button {
   --g1: var(--meadow-1);
   --g2: var(--meadow-2);
   --g3: var(--meadow-3);
-}
-
-.orb.state-error {
-  --g1: var(--coral-1);
-  --g2: var(--coral-2);
-  --g3: var(--coral-3);
 }
 
 @media (prefers-reduced-motion: no-preference) {

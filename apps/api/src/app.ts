@@ -18,6 +18,8 @@ export function createApp() {
   app.use(express.json());
 
   app.use(healthRouter);
+  // The care team list is shown on the public landing page.
+  app.use("/api", providersRouter);
   app.use(
     "/api",
     clerkMiddleware({
@@ -32,7 +34,6 @@ export function createApp() {
   app.use("/api", patientsRouter);
   app.use("/api", handoffsRouter);
   app.use("/api", metricsRouter);
-  app.use("/api", providersRouter);
 
   app.use(errorHandler);
   return app;

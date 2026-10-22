@@ -2,6 +2,8 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useAuth } from "@clerk/nextjs";
 import { LiveKitRoom, RoomAudioRenderer, useLocalParticipant, useRoomContext } from "@livekit/components-react";
 import { ConnectionError, ConnectionErrorReason, DisconnectReason, MediaDeviceFailure, Room, RoomEvent } from "livekit-client";
 import { ArrowsOut, ChatCircleText, House, Microphone, MicrophoneSlash, Phone, PhoneDisconnect } from "@phosphor-icons/react";
@@ -54,6 +56,8 @@ export function CallConsole() {
   const [fullScreen, setFullScreen] = useState(false);
   // Bumped on every start/cancel so a late response from an abandoned attempt is ignored.
   const attempt = useRef(0);
+  const { isSignedIn } = useAuth();
+  const router = useRouter();
 
   const { events } = useCallEventStream(onCall ? (session?.callId ?? null) : null);
   const derived = useMemo(() => deriveCallState(events), [events]);
@@ -91,6 +95,11 @@ export function CallConsole() {
 
   async function handleStart() {
     if (stage === "microphone" || stage === "connecting") return;
+    // Home is public; calling Suzi is the one thing that needs an account.
+    if (!isSignedIn) {
+      router.push("/sign-in");
+      return;
+    }
     const id = ++attempt.current;
     leaveRoom();
     setOnCall(false);

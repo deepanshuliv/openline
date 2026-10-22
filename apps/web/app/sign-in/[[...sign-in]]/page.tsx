@@ -3,7 +3,7 @@ import { Wordmark } from "@/components/SiteNav";
 import { Ribbon } from "@/components/Ribbon";
 import { AGENT_NAME } from "@/lib/shared";
 
-// The one page a signed-out visitor can see (proxy.ts sends everyone else here).
+// Signed-out visitors land here from Call Suzi on home, or from any signed-in page.
 // Same frame as home: wordmark, serif headline, then the ribbon underneath.
 export default function SignInPage() {
   return (
